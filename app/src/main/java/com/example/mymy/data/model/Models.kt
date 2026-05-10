@@ -1,5 +1,5 @@
 package com.example.mymy.data.model
-
+//latest
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
