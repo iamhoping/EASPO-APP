@@ -91,18 +91,20 @@ class TeacherViewModel : ViewModel() {
                 val studentIdsFromEnrollments = enrollments.map { it.studentId }.toSet()
                 Log.d("TeacherVM", "Found ${enrollments.size} enrollments, unique student IDs: $studentIdsFromEnrollments")
 
-                // 4. Fetch Student Profiles
+                // 4. Fetch Student Profiles (Enrolled or in Section)
+                val sectionIds = fetchedSchedules.mapNotNull { it.sectionId }.toSet()
+                
                 val finalStudents = try {
-                    Log.d("TeacherVM", "Querying profiles for enrolled students...")
+                    Log.d("TeacherVM", "Querying profiles for enrolled students and sections...")
                     
-                    val enrolledStudents = if (studentIdsFromEnrollments.isNotEmpty()) {
-                        SupabaseConfig.client.postgrest["profiles"]
-                            .select {
-                                filter { eq("role", "STUDENT") }
-                            }.decodeList<User>().filter { student ->
-                                student.id in studentIdsFromEnrollments
-                            }
-                    } else emptyList()
+                    val allStudents = SupabaseConfig.client.postgrest["profiles"]
+                        .select {
+                            filter { eq("role", "STUDENT") }
+                        }.decodeList<User>()
+
+                    val enrolledStudents = allStudents.filter { student ->
+                        student.id in studentIdsFromEnrollments || (student.sectionId != null && student.sectionId in sectionIds)
+                    }
 
                     enrolledStudents.distinctBy { it.id }
                 } catch (e: Exception) { 

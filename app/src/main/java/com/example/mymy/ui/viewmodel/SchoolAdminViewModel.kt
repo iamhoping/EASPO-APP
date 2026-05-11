@@ -10,6 +10,8 @@ import com.example.mymy.data.model.Attendance
 import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.RegisterUserRequest
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.model.Section
+import com.example.mymy.data.model.Subject
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.data.remote.SupabaseConfig
@@ -29,6 +31,8 @@ class SchoolAdminViewModel : ViewModel() {
     var allSchedules by mutableStateOf<List<Schedule>>(emptyList())
     var allEnrollments by mutableStateOf<List<Enrollment>>(emptyList())
     var allAttendance by mutableStateOf<List<Attendance>>(emptyList())
+    var allSections by mutableStateOf<List<Section>>(emptyList())
+    var allSubjects by mutableStateOf<List<Subject>>(emptyList())
     
     var searchQuery by mutableStateOf("")
     var roleFilter by mutableStateOf<UserRole?>(null)
@@ -80,6 +84,20 @@ class SchoolAdminViewModel : ViewModel() {
                     Log.e("SchoolAdminVM", "Error fetching attendance", e)
                     emptyList()
                 }
+
+                allSections = try {
+                    SupabaseConfig.client.postgrest["sections"].select().decodeList<Section>().sortedBy { it.name }
+                } catch (e: Exception) {
+                    Log.e("SchoolAdminVM", "Error fetching sections", e)
+                    emptyList()
+                }
+
+                allSubjects = try {
+                    SupabaseConfig.client.postgrest["subjects"].select().decodeList<Subject>().sortedBy { it.name }
+                } catch (e: Exception) {
+                    Log.e("SchoolAdminVM", "Error fetching subjects", e)
+                    emptyList()
+                }
                     
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Fetch data failed", e)
@@ -119,6 +137,19 @@ class SchoolAdminViewModel : ViewModel() {
                 }
 
                 SupabaseConfig.client.postgrest["schedules"].insert(schedules)
+
+                // Update section status and student status if section-based
+                val sectionIds = schedules.mapNotNull { it.sectionId }.distinct()
+                if (sectionIds.isNotEmpty()) {
+                    SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Scheduled")) {
+                        filter { isIn("id", sectionIds) }
+                    }
+                    
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("status" to "Assigned")) {
+                        filter { isIn("section_id", sectionIds) }
+                    }
+                }
+
                 fetchData() 
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to save schedules"
@@ -146,6 +177,9 @@ class SchoolAdminViewModel : ViewModel() {
     fun deleteSchedule(id: Long) {
         viewModelScope.launch {
             try {
+                // Find the schedule first to check if it's section-based
+                val scheduleToDelete = allSchedules.find { it.id == id }
+                
                 // Also delete related enrollments
                 try {
                     SupabaseConfig.client.postgrest["enrollments"].delete {
@@ -156,6 +190,23 @@ class SchoolAdminViewModel : ViewModel() {
                 }
 
                 SupabaseConfig.client.postgrest["schedules"].delete { filter { eq("id", id) } }
+
+                // If it was a section schedule, re-check if the section has other schedules
+                scheduleToDelete?.sectionId?.let { sId ->
+                    val otherSchedules = SupabaseConfig.client.postgrest["schedules"]
+                        .select { filter { eq("section_id", sId) } }
+                        .decodeList<Schedule>()
+                    
+                    if (otherSchedules.isEmpty()) {
+                        SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Pending")) {
+                            filter { eq("id", sId) }
+                        }
+                        SupabaseConfig.client.postgrest["profiles"].update(mapOf("status" to "Enrolled")) {
+                            filter { eq("section_id", sId) }
+                        }
+                    }
+                }
+
                 fetchData()
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to delete schedule"
@@ -170,6 +221,169 @@ class SchoolAdminViewModel : ViewModel() {
                 fetchData()
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to delete user"
+            }
+        }
+    }
+
+    fun createSection(name: String, gradeLevel: String, adviserId: String? = null, studentIds: List<String> = emptyList()) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                val section = Section(name = name, gradeLevel = gradeLevel, adviserId = adviserId)
+                val response = SupabaseConfig.client.postgrest["sections"].insert(section) {
+                    select()
+                }.decodeSingle<Section>()
+                
+                val newId = response.id
+                if (newId != null && studentIds.isNotEmpty()) {
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to newId)) {
+                        filter { isIn("id", studentIds) }
+                    }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Create section failed", e)
+                errorMessage = "Failed to create section: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun updateSection(section: Section, studentIds: List<String>) {
+        val sectionId = section.id ?: return
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                // 1. Update section details
+                SupabaseConfig.client.postgrest["sections"].update(section) {
+                    filter { eq("id", sectionId) }
+                }
+                
+                // 2. Clear existing members
+                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
+                    filter { eq("section_id", sectionId) }
+                }
+
+                // 3. Assign new members
+                if (studentIds.isNotEmpty()) {
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
+                        filter { isIn("id", studentIds) }
+                    }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Update section failed", e)
+                errorMessage = "Failed to update section: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun updateSectionMembers(sectionId: Long, studentIds: List<String>) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                // 1. Clear existing members
+                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
+                    filter { eq("section_id", sectionId) }
+                }
+
+                // 2. Assign new members
+                if (studentIds.isNotEmpty()) {
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
+                        filter {
+                            isIn("id", studentIds)
+                        }
+                    }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Update section members failed", e)
+                errorMessage = "Failed to update section members: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun deleteSection(sectionId: Long) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                // 1. Detach all students
+                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
+                    filter { eq("section_id", sectionId) }
+                }
+                
+                // 2. Delete the section
+                SupabaseConfig.client.postgrest["sections"].delete {
+                    filter { eq("id", sectionId) }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Delete section failed", e)
+                errorMessage = "Failed to delete section: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun createSubject(subject: Subject) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["subjects"].insert(subject)
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Create subject failed", e)
+                errorMessage = "Failed to create subject: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun updateSubject(subject: Subject) {
+        val id = subject.id ?: return
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["subjects"].update(subject) {
+                    filter { eq("id", id) }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Update subject failed", e)
+                errorMessage = "Failed to update subject: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun deleteSubject(id: Int) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["subjects"].delete {
+                    filter { eq("id", id) }
+                }
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Delete subject failed", e)
+                errorMessage = "Failed to delete subject: ${e.message}"
+            } finally {
+                isLoading = false
             }
         }
     }
@@ -285,6 +499,16 @@ class SchoolAdminViewModel : ViewModel() {
                 
                 val savedSchedule = response.decodeSingle<Schedule>()
                 val scheduleId = savedSchedule.id ?: throw Exception("Failed to retrieve saved schedule ID")
+
+                // If it's a section schedule, update section and student status
+                savedSchedule.sectionId?.let { sId ->
+                    SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Scheduled")) {
+                        filter { eq("id", sId) }
+                    }
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("status" to "Assigned")) {
+                        filter { eq("section_id", sId) }
+                    }
+                }
 
                 // 3. Update Enrollments
                 // Delete existing ones

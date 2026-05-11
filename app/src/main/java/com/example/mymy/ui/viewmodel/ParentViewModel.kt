@@ -236,7 +236,7 @@ class ParentViewModel : ViewModel() {
             emptyList()
         }
 
-        // 3. Fetch Schedule via Enrollments
+        // 3. Fetch Schedule via Enrollments AND Section
         childSchedule = try {
             val enrollments = SupabaseConfig.client.postgrest["enrollments"]
                 .select {
@@ -244,15 +244,16 @@ class ParentViewModel : ViewModel() {
                 }.decodeList<Enrollment>()
             
             val scheduleIds = enrollments.map { it.scheduleId }
-            val res = if (scheduleIds.isNotEmpty()) {
-                val allSchedules = SupabaseConfig.client.postgrest["schedules"]
-                    .select().decodeList<Schedule>()
-                allSchedules.filter { it.id in scheduleIds }
-            } else {
-                emptyList()
+            val sectionId = student?.sectionId
+
+            val allSchedules = SupabaseConfig.client.postgrest["schedules"]
+                .select().decodeList<Schedule>()
+            
+            val res = allSchedules.filter { 
+                it.id in scheduleIds || (sectionId != null && it.sectionId == sectionId)
             }
             
-            Log.d("ParentVM", "Schedule found via enrollments: ${res.size} items for UUID $studentId")
+            Log.d("ParentVM", "Schedule found (Enr+Sec): ${res.size} items for UUID $studentId")
             res
         } catch (e: Exception) {
             Log.e("ParentVM", "Schedule fetch failed for UUID $studentId", e)

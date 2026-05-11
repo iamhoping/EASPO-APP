@@ -59,7 +59,7 @@ class StudentViewModel : ViewModel() {
                 fetchGrades(userId)
                 subscribeToGrades(userId)
 
-                // Fetch Schedule via Enrollments (Plan A)
+                // Fetch Schedule via Enrollments AND Section
                 scheduleList = try {
                     val enrollments = SupabaseConfig.client.postgrest["enrollments"]
                         .select {
@@ -67,15 +67,16 @@ class StudentViewModel : ViewModel() {
                         }.decodeList<Enrollment>()
                     
                     val scheduleIds = enrollments.map { it.scheduleId }
-                    if (scheduleIds.isNotEmpty()) {
-                        val allSchedules = SupabaseConfig.client.postgrest["schedules"]
-                            .select().decodeList<Schedule>()
-                        allSchedules.filter { it.id in scheduleIds }
-                    } else {
-                        emptyList()
+                    val sectionId = userProfile?.sectionId
+
+                    val allSchedules = SupabaseConfig.client.postgrest["schedules"]
+                        .select().decodeList<Schedule>()
+                    
+                    allSchedules.filter { 
+                        it.id in scheduleIds || (sectionId != null && it.sectionId == sectionId)
                     }
                 } catch (e: Exception) { 
-                    android.util.Log.e("StudentVM", "Error fetching schedule via enrollments", e)
+                    android.util.Log.e("StudentVM", "Error fetching schedule", e)
                     emptyList() 
                 }
 

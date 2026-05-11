@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
@@ -29,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.model.Section
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.ui.theme.BackgroundColor
@@ -36,10 +36,164 @@ import com.example.mymy.ui.theme.DeepGreen
 import com.example.mymy.ui.theme.LightGreen
 import com.example.mymy.ui.theme.SageGreen
 import com.example.mymy.ui.viewmodel.SchoolAdminViewModel
+import com.example.mymy.data.model.Subject
 import java.util.*
 
 val ErrorColor = Color(0xFFD32F2F)
 val LightText = Color(0xFF757575)
+
+
+@Composable
+fun SubjectList(
+    subjects: List<com.example.mymy.data.model.Subject>,
+    onSubjectClick: (com.example.mymy.data.model.Subject) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                Column {
+                    Text("Subject Management", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("${subjects.size} Configured Subjects", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 24.dp)
+        ) {
+            items(subjects) { subject ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onSubjectClick(subject) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(subject.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
+                            Text("Code: ${subject.code ?: "N/A"} • Grade ${subject.gradeLevel ?: "All"}", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                    }
+                }
+            }
+            
+            if (subjects.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Book, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No subjects created yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManageSubjectDialog(
+    subject: com.example.mymy.data.model.Subject,
+    onDismiss: () -> Unit,
+    onSave: (com.example.mymy.data.model.Subject) -> Unit,
+    onDelete: (Int) -> Unit
+) {
+    var name by remember { mutableStateOf(subject.name) }
+    var code by remember { mutableStateOf(subject.code ?: "") }
+    var gradeLevel by remember { mutableStateOf(subject.gradeLevel ?: "7") }
+    var units by remember { mutableStateOf(subject.units?.toString() ?: "3") }
+
+    var gradeExpanded by remember { mutableStateOf(false) }
+    val gradeLevels = (7..12).map { it.toString() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (subject.id == null) "Create Subject" else "Edit Subject", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Subject Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it },
+                    label = { Text("Subject Code") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                ExposedDropdownMenuBox(expanded = gradeExpanded, onExpandedChange = { gradeExpanded = it }) {
+                    OutlinedTextField(
+                        value = "Grade $gradeLevel",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Grade Level") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gradeExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(expanded = gradeExpanded, onDismissRequest = { gradeExpanded = false }) {
+                        gradeLevels.forEach { lvl ->
+                            DropdownMenuItem(text = { Text("Grade $lvl") }, onClick = { gradeLevel = lvl; gradeExpanded = false })
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = units,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) units = it },
+                    label = { Text("Units") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                )
+
+                if (subject.id != null) {
+                    TextButton(
+                        onClick = { onDelete(subject.id!!) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = ErrorColor),
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Icon(Icons.Default.Delete, "Delete")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Delete Subject")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { 
+                    onSave(subject.copy(name = name, code = code, gradeLevel = gradeLevel, units = units.toIntOrNull() ?: 3))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = DeepGreen),
+                enabled = name.isNotBlank() && code.isNotBlank()
+            ) {
+                Text("Save Subject")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,14 +207,20 @@ fun SchoolAdminScreen(
     val users = viewModel.allUsers
     val filteredUsers = viewModel.filteredUsers
     val schedules = viewModel.allSchedules
+    val sections = viewModel.allSections
     val isLoading = viewModel.isLoading
     
     var selectedTab by remember { mutableIntStateOf(0) }
     var showUserDialog by remember { mutableStateOf(false) }
     var showScheduleDialog by remember { mutableStateOf(false) }
+    var showSectionDialog by remember { mutableStateOf(false) }
+    var showSubjectDialog by remember { mutableStateOf(false) }
     var editingSchedule by remember { mutableStateOf<Schedule?>(null) }
+    var editingSection by remember { mutableStateOf<Section?>(null) }
+    var editingSubject by remember { mutableStateOf<com.example.mymy.data.model.Subject?>(null) }
     var showAttendanceLog by remember { mutableStateOf(false) }
     var userToDelete by remember { mutableStateOf<User?>(null) }
+    var viewingSection by remember { mutableStateOf<Section?>(null) }
 
     Scaffold(
         bottomBar = {
@@ -101,10 +261,36 @@ fun SchoolAdminScreen(
                         )
                     )
                     NavigationBarItem(
+                        icon = { Icon(Icons.Default.Class, "Sections") },
+                        label = { Text("Sections") },
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color.White,
+                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                            indicatorColor = SageGreen,
+                            selectedTextColor = Color.White,
+                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        )
+                    )
+                    NavigationBarItem(
                         icon = { Icon(Icons.Default.DateRange, "Schedules") },
                         label = { Text("Schedules") },
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color.White,
+                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                            indicatorColor = SageGreen,
+                            selectedTextColor = Color.White,
+                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        )
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Book, "Subjects") },
+                        label = { Text("Subjects") },
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.White,
                             unselectedIconColor = Color.White.copy(alpha = 0.6f),
@@ -120,10 +306,20 @@ fun SchoolAdminScreen(
             if (selectedTab != 0) {
                 FloatingActionButton(
                     onClick = {
-                        if (selectedTab == 1) showUserDialog = true
-                        else if (selectedTab == 2) {
-                            editingSchedule = Schedule(subject = "", day = "Monday", startTime = "08:00:00", endTime = "09:00:00", room = "")
-                            showScheduleDialog = true
+                        when (selectedTab) {
+                            1 -> showUserDialog = true
+                            2 -> {
+                                editingSchedule = Schedule(subject = "", day = "Monday", startTime = "08:00:00", endTime = "09:00:00", room = "")
+                                showScheduleDialog = true
+                            }
+                            3 -> {
+                                editingSection = Section(name = "", gradeLevel = "7")
+                                showSectionDialog = true
+                            }
+                            4 -> {
+                                editingSubject = com.example.mymy.data.model.Subject(name = "", code = "", gradeLevel = "7")
+                                showSubjectDialog = true
+                            }
                         }
                     },
                     containerColor = DeepGreen,
@@ -186,6 +382,34 @@ fun SchoolAdminScreen(
                         editingSchedule = it
                         showScheduleDialog = true
                     })
+                    3 -> {
+                        if (viewingSection == null) {
+                            SectionList(
+                                sections = sections,
+                                users = users,
+                                onSectionClick = { viewingSection = it }
+                            )
+                        } else {
+                            SectionDetailView(
+                                section = viewingSection!!,
+                                students = users.filter { it.sectionId == viewingSection!!.id },
+                                onBack = { viewingSection = null },
+                                onEdit = {
+                                    editingSection = viewingSection
+                                    showSectionDialog = true
+                                }
+                            )
+                        }
+                    }
+                    4 -> {
+                        SubjectList(
+                            subjects = viewModel.allSubjects,
+                            onSubjectClick = {
+                                editingSubject = it
+                                showSubjectDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -207,6 +431,8 @@ fun SchoolAdminScreen(
                 schedule = editingSchedule!!,
                 students = users.filter { it.role == UserRole.STUDENT },
                 teachers = users.filter { it.role == UserRole.TEACHER },
+                sections = sections,
+                subjects = viewModel.allSubjects,
                 enrollments = viewModel.allEnrollments,
                 onDismiss = { 
                     showScheduleDialog = false
@@ -221,6 +447,65 @@ fun SchoolAdminScreen(
                     schedule.id?.let { viewModel.deleteSchedule(it) }
                     showScheduleDialog = false
                     editingSchedule = null
+                }
+            )
+        }
+
+        if (showSectionDialog && editingSection != null) {
+            ManageSectionDialog(
+                section = editingSection!!,
+                allStudents = users.filter { it.role == UserRole.STUDENT },
+                teachers = viewModel.allTeachers,
+                onDismiss = {
+                    showSectionDialog = false
+                    editingSection = null
+                },
+                onSave = { name, grade, adviserId, studentIds ->
+                    if (editingSection?.id == null) {
+                        viewModel.createSection(name, grade, adviserId, studentIds)
+                    } else {
+                        val updatedSection = editingSection!!.copy(
+                            name = name,
+                            gradeLevel = grade,
+                            adviserId = adviserId
+                        )
+                        viewModel.updateSection(updatedSection, studentIds)
+                        if (viewingSection?.id == updatedSection.id) {
+                            viewingSection = updatedSection
+                        }
+                    }
+                    showSectionDialog = false
+                    editingSection = null
+                },
+                onDelete = { id ->
+                    viewModel.deleteSection(id)
+                    if (viewingSection?.id == id) viewingSection = null
+                    showSectionDialog = false
+                    editingSection = null
+                }
+            )
+        }
+
+        if (showSubjectDialog && editingSubject != null) {
+            ManageSubjectDialog(
+                subject = editingSubject!!,
+                onDismiss = {
+                    showSubjectDialog = false
+                    editingSubject = null
+                },
+                onSave = { updated ->
+                    if (updated.id == null) {
+                        viewModel.createSubject(updated)
+                    } else {
+                        viewModel.updateSubject(updated)
+                    }
+                    showSubjectDialog = false
+                    editingSubject = null
+                },
+                onDelete = { id ->
+                    viewModel.deleteSubject(id)
+                    showSubjectDialog = false
+                    editingSubject = null
                 }
             )
         }
@@ -660,6 +945,330 @@ fun AdminScheduleList(
     }
 }
 
+@Composable
+fun SectionList(
+    sections: List<Section>,
+    users: List<User>,
+    onSectionClick: (Section) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                Column {
+                    Text("Section Management", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("${sections.size} Active Sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 24.dp)
+        ) {
+            items(sections) { section ->
+                val studentCount = users.count { it.sectionId == section.id }
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onSectionClick(section) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(section.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
+                            Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                    }
+                }
+            }
+            
+            if (sections.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Class, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No sections created yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionDetailView(
+    section: Section,
+    students: List<User>,
+    onBack: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(160.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp).fillMaxSize()) {
+                IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                }
+                Column(modifier = Modifier.align(Alignment.CenterStart).padding(top = 40.dp)) {
+                    Text("Grade ${section.gradeLevel}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                    Text(section.name, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                }
+                
+                IconButton(onClick = onEdit, modifier = Modifier.align(Alignment.TopEnd)) {
+                    Icon(Icons.Default.Edit, "Edit", tint = Color.White)
+                }
+            }
+        }
+
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                text = "ENROLLED STUDENTS (${students.size})",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = DeepGreen,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(students) { student ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White,
+                        shadowElevation = 1.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(40.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                color = LightGreen
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        (student.name ?: "S").take(1).uppercase(),
+                                        fontWeight = FontWeight.Bold,
+                                        color = DeepGreen
+                                    )
+                                }
+                            }
+                            
+                            Column(modifier = Modifier.padding(start = 16.dp)) {
+                                Text(
+                                    student.name ?: "Unknown",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    "ID: ${student.studentNo ?: "N/A"}",
+                                    color = LightText,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (students.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            Text("No students enrolled in this section.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManageSectionDialog(
+    section: Section,
+    allStudents: List<User>,
+    teachers: List<User> = emptyList(),
+    onDismiss: () -> Unit,
+    onSave: (String, String, String?, List<String>) -> Unit,
+    onDelete: (Long) -> Unit
+) {
+    var name by remember { mutableStateOf(section.name) }
+    var gradeLevel by remember { mutableStateOf(section.gradeLevel) }
+    var adviserId by remember { mutableStateOf(section.adviserId) }
+
+    val filteredStudents = remember(gradeLevel, allStudents) {
+        allStudents.filter {
+            val studentGrade = it.gradeLevel?.trim() ?: ""
+            val targetGrade = gradeLevel.trim()
+            studentGrade == targetGrade && 
+            (it.sectionId == null || (section.id != null && it.sectionId == section.id))
+        }
+    }
+    
+    val initialSelectedIds = remember(section.id, allStudents) {
+        if (section.id == null) {
+            emptySet()
+        } else {
+            allStudents.filter { it.sectionId == section.id }.map { it.id }.toSet()
+        }
+    }
+    var selectedStudentIds by remember { mutableStateOf(initialSelectedIds) }
+
+    var gradeExpanded by remember { mutableStateOf(false) }
+    var teacherExpanded by remember { mutableStateOf(false) }
+    val gradeLevels = (7..12).map { it.toString() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (section.id == null) "Create Section" else "Edit Section", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Section Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                ExposedDropdownMenuBox(expanded = gradeExpanded, onExpandedChange = { gradeExpanded = it }) {
+                    OutlinedTextField(
+                        value = "Grade $gradeLevel",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Grade Level") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gradeExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = section.id == null // Only allow changing grade for new sections
+                    )
+                    ExposedDropdownMenu(expanded = gradeExpanded, onDismissRequest = { gradeExpanded = false }) {
+                        gradeLevels.forEach { lvl ->
+                            DropdownMenuItem(
+                                text = { Text("Grade $lvl") },
+                                onClick = { 
+                                    gradeLevel = lvl
+                                    gradeExpanded = false
+                                    // Reset selected students that don't match the new grade level
+                                    // and aren't already part of this section (if editing)
+                                    selectedStudentIds = selectedStudentIds.filter { id ->
+                                        val student = allStudents.find { it.id == id }
+                                        student?.gradeLevel == lvl
+                                    }.toSet()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ExposedDropdownMenuBox(expanded = teacherExpanded, onExpandedChange = { teacherExpanded = it }) {
+                    OutlinedTextField(
+                        value = teachers.find { it.id == adviserId }?.name ?: "Select Adviser",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Adviser (Teacher)") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = teacherExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(expanded = teacherExpanded, onDismissRequest = { teacherExpanded = false }) {
+                        teachers.forEach { teacher ->
+                            DropdownMenuItem(text = { Text(teacher.name ?: "Unknown") }, onClick = { adviserId = teacher.id; teacherExpanded = false })
+                        }
+                    }
+                }
+
+                if (true) { // Always show student management, even for new sections
+                    Text("Manage Students (Grade $gradeLevel)", style = MaterialTheme.typography.labelMedium, color = DeepGreen, fontWeight = FontWeight.Bold)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 200.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF8F8F8),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEEEEEE))
+                    ) {
+                        if (filteredStudents.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    "No unassigned Grade $gradeLevel students found",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        } else {
+                            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                                items(filteredStudents) { student ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().clickable {
+                                            selectedStudentIds = if (selectedStudentIds.contains(student.id)) selectedStudentIds - student.id else selectedStudentIds + student.id
+                                        }.padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = selectedStudentIds.contains(student.id),
+                                            onCheckedChange = { checked ->
+                                                selectedStudentIds = if (checked) selectedStudentIds + student.id else selectedStudentIds - student.id
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = DeepGreen)
+                                        )
+                                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                                            Text(student.name ?: "Unknown", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                            Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.labelSmall, color = LightText)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (section.id != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { onDelete(section.id!!) },
+                            colors = ButtonDefaults.textButtonColors(contentColor = ErrorColor),
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        ) {
+                            Icon(Icons.Default.Delete, "Delete")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete Section")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, gradeLevel, adviserId, selectedStudentIds.toList()) },
+                colors = ButtonDefaults.buttonColors(containerColor = DeepGreen),
+                enabled = name.isNotBlank()
+            ) {
+                Text("Save Section")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterUserDialog(
@@ -864,6 +1473,8 @@ fun ManageScheduleDialog(
     schedule: Schedule,
     students: List<User>,
     teachers: List<User>,
+    sections: List<Section>,
+    subjects: List<Subject>,
     enrollments: List<Enrollment>,
     onDismiss: () -> Unit,
     onSave: (Schedule, List<String>) -> Unit,
@@ -883,8 +1494,10 @@ fun ManageScheduleDialog(
     }
     var selectedStudentIds by remember { mutableStateOf(initialSelectedIds) }
     var selectedTeacherId by remember { mutableStateOf(schedule.teacherId) }
+    var selectedSectionId by remember { mutableStateOf(schedule.sectionId) }
 
     var teacherExpanded by remember { mutableStateOf(false) }
+    var sectionExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
 
     val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
@@ -1083,6 +1696,71 @@ fun ManageScheduleDialog(
                     }
                 }
 
+                ExposedDropdownMenuBox(expanded = sectionExpanded, onExpandedChange = { sectionExpanded = it }) {
+                    OutlinedTextField(
+                        value = sections.find { it.id == selectedSectionId }?.name ?: "Assign Section (Optional)",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Section") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sectionExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(expanded = sectionExpanded, onDismissRequest = { sectionExpanded = false }) {
+                        DropdownMenuItem(text = { Text("None") }, onClick = { selectedSectionId = null; sectionExpanded = false })
+                        sections.filter { it.status != "Scheduled" || it.id == schedule.sectionId }.forEach { section ->
+                            DropdownMenuItem(
+                                text = { Text("${section.name} (Grade ${section.gradeLevel})") }, 
+                                onClick = { 
+                                    selectedSectionId = section.id
+                                    // Auto-enroll section students
+                                    val sectionStudents = students.filter { it.sectionId == section.id }.map { it.id }.toSet()
+                                    selectedStudentIds = selectedStudentIds + sectionStudents
+                                    sectionExpanded = false 
+                                }
+                            )
+                        }
+                    }
+                }
+
+                var subjectExpanded by remember { mutableStateOf(false) }
+                val filteredSubjects = remember(selectedSectionId, subjects) {
+                    val section = sections.find { it.id == selectedSectionId }
+                    if (section != null) {
+                        subjects.filter { it.gradeLevel == section.gradeLevel }
+                    } else {
+                        subjects
+                    }
+                }
+
+                ExposedDropdownMenuBox(expanded = subjectExpanded, onExpandedChange = { subjectExpanded = it }) {
+                    OutlinedTextField(
+                        value = subject ?: "Select Subject",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Subject") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(expanded = subjectExpanded, onDismissRequest = { subjectExpanded = false }) {
+                        filteredSubjects.forEach { s: com.example.mymy.data.model.Subject ->
+                            DropdownMenuItem(
+                                text = { 
+                                    Column {
+                                        Text(s.name)
+                                        Text(s.code ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                    }
+                                },
+                                onClick = {
+                                    subject = s.name
+                                    subjectExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Text("Enrolled Students", style = MaterialTheme.typography.labelMedium, color = DeepGreen, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
@@ -1145,6 +1823,7 @@ fun ManageScheduleDialog(
                         day = day, 
                         room = room, 
                         teacherId = selectedTeacherId,
+                        sectionId = selectedSectionId,
                         startTime = formatToTime(fromTime),
                         endTime = formatToTime(toTime)
                     )

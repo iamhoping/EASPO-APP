@@ -609,8 +609,14 @@ fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
 
                 val enrolledStudents = remember(viewModel.students, selectedSubject, viewModel.scheduleList) {
                     try {
+                        val scheduleForSubject = viewModel.scheduleList.filter { it.subject == selectedSubject }
+                        val targetSectionIds = scheduleForSubject.mapNotNull { it.sectionId }.toSet()
+                        val targetStudentIds = scheduleForSubject.mapNotNull { it.studentId }.toSet()
+
                         viewModel.students.filter { student ->
-                            viewModel.scheduleList.any { it.subject == selectedSubject && (it.studentId == student.id || it.studentId == student.studentNo) }
+                            targetStudentIds.contains(student.id) || 
+                            targetStudentIds.contains(student.studentNo) ||
+                            (student.sectionId != null && targetSectionIds.contains(student.sectionId))
                         }.sortedBy { it.name }
                     } catch (e: Exception) {
                         emptyList()
@@ -717,7 +723,13 @@ fun TeacherGradingScreen(viewModel: TeacherViewModel) {
         // Student List for Grading
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             val enrolledStudents = viewModel.students.filter { student ->
-                viewModel.scheduleList.any { it.subject == selectedSubject && (it.studentId == student.id || it.studentId == student.studentNo) }
+                val scheduleForSubject = viewModel.scheduleList.filter { it.subject == selectedSubject }
+                val targetSectionIds = scheduleForSubject.mapNotNull { it.sectionId }.toSet()
+                val targetStudentIds = scheduleForSubject.mapNotNull { it.studentId }.toSet()
+                
+                targetStudentIds.contains(student.id) || 
+                targetStudentIds.contains(student.studentNo) ||
+                (student.sectionId != null && targetSectionIds.contains(student.sectionId))
             }
             
             items(enrolledStudents) { student ->
