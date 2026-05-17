@@ -3,8 +3,6 @@ package com.example.mymy.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -19,12 +17,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mymy.data.model.Schedule
 import com.example.mymy.ui.theme.DeepGreen
-import com.example.mymy.ui.theme.LightGreen
-import com.example.mymy.ui.theme.SageGreen
 import java.util.Calendar
 import java.util.Locale
 
@@ -41,18 +38,23 @@ fun CalendarScheduleView(
         calendar.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.SHORT, Locale.ENGLISH)?.uppercase() ?: "MON" 
     }
     
-    // Adjusted Monday logic: find the most recent Monday
+    // Explicit Monday logic: find the Monday of the current week
     val mondayCalendar = remember {
-        (calendar.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-            if (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
-                add(Calendar.DAY_OF_YEAR, -6)
-            }
+        Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.MONDAY
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            
+            // Set to Monday of the current week regardless of locale
+            val daysFromMonday = (get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY + 7) % 7
+            add(Calendar.DAY_OF_YEAR, -daysFromMonday)
         }
     }
 
     val weekDays = remember {
-        (0..4).map { offset -> // Changed from 0..5 to 0..4 for Mon-Fri only
+        (0..4).map { offset -> // Monday to Friday only
             val d = (mondayCalendar.clone() as Calendar).apply {
                 add(Calendar.DAY_OF_YEAR, offset)
             }
@@ -148,14 +150,13 @@ fun CalendarScheduleView(
 
         // Calendar Strip
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
         ) {
-            Spacer(modifier = Modifier.width(48.dp)) // Offset for time column
+            Spacer(modifier = Modifier.width(80.dp)) // Match the time column width
             weekDays.forEach { day ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable { selectedDay = day.name }
+                    modifier = Modifier.weight(1f).clickable { selectedDay = day.name }
                 ) {
                     Text(day.name, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     Spacer(modifier = Modifier.height(4.dp))
@@ -176,24 +177,51 @@ fun CalendarScheduleView(
         HorizontalDivider(color = Color(0xFFF0F4F4), thickness = 1.dp)
 
         // Time Grid
-        Box(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Column {
-                (8..18).forEach { hour ->
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+        ) {
+            val gridWidth = maxWidth - 80.dp
+            val columnWidth = gridWidth / 5
+
+            Column(modifier = Modifier.padding(top = 24.dp, bottom = 32.dp)) {
+                (7..18).forEach { hour ->
                     TimeRow(hour)
                 }
             }
             
             // Schedule Items (Visual representation)
-            // This is a simplified grid placement for demo
             schedules.forEach { schedule ->
-                // Basic logic: if day matches selectedDay (or in week view, we'd place them horizontally)
-                // For this UI, we'll just show them in the grid if they match the selected day
-                val scheduleDayShort = schedule.day.uppercase().take(3)
-                if (scheduleDayShort == selectedDay || viewMode == "Week") {
-                   ScheduleGridItem(schedule, selectedDay, viewMode == "Week")
+                val dayOfWeekIndex = getDayIndex(schedule.day)
+                val scheduleDayShort = schedule.day?.uppercase()?.take(3) ?: ""
+                
+                // Only show Monday-Friday in Week view, or the specific day in Day view
+                if ((viewMode == "Day" && scheduleDayShort == selectedDay) || 
+                    (viewMode == "Week" && dayOfWeekIndex in 0..4)) {
+                   ScheduleGridItem(
+                       schedule = schedule, 
+                       isWeekView = viewMode == "Week",
+                       columnWidth = columnWidth,
+                       gridWidth = gridWidth,
+                       modifier = Modifier.padding(top = 24.dp)
+                   )
                 }
             }
         }
+    }
+}
+
+private fun getDayIndex(day: String?): Int {
+    val d = day?.uppercase() ?: return -1
+    return when {
+        d.startsWith("MON") -> 0
+        d.startsWith("TUE") -> 1
+        d.startsWith("WED") -> 2
+        d.startsWith("THU") -> 3
+        d.startsWith("FRI") -> 4
+        else -> -1
     }
 }
 
@@ -230,59 +258,66 @@ fun TimeRow(hour: Int) {
             modifier = Modifier.width(80.dp).padding(top = 8.dp),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.Gray
+            color = Color.DarkGray,
+            fontWeight = FontWeight.Medium
         )
-        Box(modifier = Modifier.fillMaxSize().padding(end = 16.dp)) {
-            HorizontalDivider(color = Color(0xFFF0F4F4), modifier = Modifier.align(Alignment.TopStart))
+        Box(modifier = Modifier.fillMaxSize()) {
+            HorizontalDivider(color = Color(0xFFE0E0E0), modifier = Modifier.align(Alignment.TopStart))
         }
     }
 }
 
 @Composable
-fun ScheduleGridItem(schedule: Schedule, selectedDay: String, isWeekView: Boolean) {
+fun ScheduleGridItem(
+    schedule: Schedule, 
+    isWeekView: Boolean,
+    modifier: Modifier = Modifier,
+    columnWidth: Dp = 60.dp,
+    gridWidth: Dp = 300.dp
+) {
     // Use start_time/end_time if available
     fun parseTime(schedule: Schedule): Pair<Float, Float> {
         try {
-            val startParts = (schedule.startTime ?: "08:00:00").split(":")
-            val endParts = (schedule.endTime ?: "09:30:00").split(":")
-            val start = startParts[0].toFloat() + startParts[1].toFloat() / 60f
-            val end = endParts[0].toFloat() + endParts[1].toFloat() / 60f
+            val startTimeStr = schedule.startTime ?: "07:00:00"
+            val endTimeStr = schedule.endTime ?: "08:30:00"
+            
+            fun toFloatHour(time: String): Float {
+                val parts = time.split(":")
+                val h = parts[0].toFloatOrNull() ?: 7f
+                val m = if (parts.size > 1) parts[1].toFloatOrNull() ?: 0f else 0f
+                return h + m / 60f
+            }
+            
+            val start = toFloatHour(startTimeStr)
+            val end = toFloatHour(endTimeStr)
             return start to (end - start)
-        } catch (e: Exception) {
-            return 8f to 1.5f
+        } catch (_: Exception) {
+            return 7f to 1.5f
         }
     }
 
     val (startTime, duration) = parseTime(schedule)
 
     
-    // Grid starts at 7 AM
+    // Grid starts at 7 AM (to match the TimeRow loop)
     val topOffset = 80.dp * (startTime - 7f)
     val height = 80.dp * duration
     
-    val dayIndex = when(schedule.day.uppercase()) {
-        "MONDAY" -> 0
-        "TUESDAY" -> 1
-        "WEDNESDAY" -> 2
-        "THURSDAY" -> 3
-        "FRIDAY" -> 4
-        "SATURDAY" -> 5
-        else -> 0
-    }
+    val dayIndex = getDayIndex(schedule.day)
     
     val isHighlighted = (schedule.subject ?: "").contains("Calc") // Mocking the highlighted state in image
     
     Box(
-        modifier = Modifier
+        modifier = modifier
             .padding(start = 80.dp)
             .offset(
-                x = if(isWeekView) (dayIndex * 60).dp else 0.dp,
+                x = if(isWeekView && dayIndex != -1) (columnWidth * dayIndex) else 0.dp,
                 y = topOffset
             )
-            .width(if(isWeekView) 55.dp else 260.dp)
+            .width(if(isWeekView) (columnWidth - 2.dp) else gridWidth - 4.dp)
             .height(height)
-            .padding(4.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(2.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(if (isHighlighted) DeepGreen else Color(0xFFE8F3F1))
             .padding(8.dp)
     ) {
@@ -310,12 +345,13 @@ fun ScheduleGridItem(schedule: Schedule, selectedDay: String, isWeekView: Boolea
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     
-                    val displayTime = remember(schedule.startTime, schedule.endTime) {
+    val displayTime = remember(schedule.startTime, schedule.endTime) {
                         fun format(time: String?): String {
                             if (time == null) return "--:--"
                             val p = time.split(":")
-                            var h = p[0].toInt()
-                            val m = p[1].toInt()
+                            if (p.size < 2) return time
+                            var h = p[0].toIntOrNull() ?: 0
+                            val m = p[1].toIntOrNull() ?: 0
                             val ampm = if (h >= 12) "PM" else "AM"
                             if (h > 12) h -= 12
                             if (h == 0) h = 12

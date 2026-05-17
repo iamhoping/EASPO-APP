@@ -1,7 +1,7 @@
 package com.example.mymy
 
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,19 +20,24 @@ import com.example.mymy.ui.screens.admin.SchoolAdminScreen
 import com.example.mymy.ui.screens.admin.WebAdminScreen
 import com.example.mymy.ui.screens.login.ForgotPasswordScreen
 import com.example.mymy.ui.screens.login.LoginScreen
+import com.example.mymy.ui.screens.login.ResetPasswordScreen
 import com.example.mymy.ui.screens.login.SignUpScreen
 import com.example.mymy.ui.screens.parent.ParentScreen
 import com.example.mymy.ui.screens.student.StudentScreen
 import com.example.mymy.ui.screens.teacher.TeacherScreen
 import com.example.mymy.ui.theme.MymyTheme
 import io.github.jan.supabase.auth.auth
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import io.github.jan.supabase.auth.handleDeeplinks
+import io.github.jan.supabase.auth.status.SessionStatus
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Handle deep links when app is opened from a cold start
+        SupabaseConfig.client.handleDeeplinks(intent)
+
         setContent {
             MymyTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -41,11 +46,41 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // Handle deep links when app is already running in background
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent) // Update activity intent so navigation can see the data
+        if (intent != null) {
+            SupabaseConfig.client.handleDeeplinks(intent)
+        }
+    }
 }
 
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+
+    // Listen for session changes (like after a reset password link is clicked)
+    LaunchedEffect(Unit) {
+        SupabaseConfig.client.auth.sessionStatus.collect { status ->
+            if (status is SessionStatus.Authenticated) {
+                // Check if the app was opened via the reset-password deep link
+                val activity = navController.context as? ComponentActivity
+                val currentIntent = activity?.intent
+                val intentData = currentIntent?.dataString
+                
+                if (intentData?.contains("reset-password") == true) {
+                    // Clear the data so it doesn't trigger again on rotation
+                    currentIntent.data = null 
+
+                    navController.navigate(Screen.ResetPassword.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = Screen.Login.route) {
         composable(Screen.Login.route) {
@@ -70,6 +105,13 @@ fun AppNavigation() {
         }
         composable(Screen.ForgotPassword.route) {
             ForgotPasswordScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Screen.ResetPassword.route) {
+            ResetPasswordScreen(onSuccess = { 
+                navController.navigate(Screen.Login.route) {
+                    popUpTo(0)
+                }
+            })
         }
         composable(Screen.StudentDashboard.route) { StudentScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }
         composable(Screen.TeacherDashboard.route) { TeacherScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }

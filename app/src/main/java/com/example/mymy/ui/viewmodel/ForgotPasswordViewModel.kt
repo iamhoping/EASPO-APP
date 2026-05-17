@@ -27,7 +27,10 @@ class ForgotPasswordViewModel : ViewModel() {
             message = null
             isError = false
             try {
-                SupabaseConfig.client.auth.resetPasswordForEmail(email.trim())
+                SupabaseConfig.client.auth.resetPasswordForEmail(
+                    email = email.trim(),
+                    redirectUrl = "easpo://reset-password"
+                )
                 message = "Password reset email sent. Please check your inbox."
                 isError = false
                 // Optional: delay then call onSuccess to navigate back
