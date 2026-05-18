@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
@@ -110,9 +111,12 @@ fun TeacherScreen(
                     )
                     NavigationBarItem(
                         icon = { Icon(Icons.Default.Groups, "Students") },
-                        label = { Text("Students") },
+                        label = { Text("Sections") },
                         selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
+                        onClick = { 
+                            selectedTab = 3
+                            // Reset any internal state if needed
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.White,
                             unselectedIconColor = Color.White.copy(alpha = 0.6f),
@@ -154,7 +158,7 @@ fun TeacherScreen(
                     )
                     1 -> TeacherSchedule(viewModel)
                     2 -> TeacherAttendanceScreen(viewModel)
-                    3 -> StudentManagement(viewModel, onAddGrade = { showGradeDialog = it }, currentSubject = null)
+                    3 -> StudentManagementFlow(viewModel)
                     4 -> TeacherProfile(viewModel, onLogout = onLogout)
                 }
             }
@@ -403,16 +407,31 @@ fun TeacherSchedule(viewModel: TeacherViewModel) {
 }
 
 @Composable
-fun StudentManagement(viewModel: TeacherViewModel, onAddGrade: (User) -> Unit, currentSubject: String? = null) {
-    var selectedSubject by remember { mutableStateOf<String?>(currentSubject) }
-    var searchQuery by remember { mutableStateOf("") }
+fun StudentManagementFlow(viewModel: TeacherViewModel) {
+    var selectedSection by remember { mutableStateOf<com.example.mymy.data.model.Section?>(null) }
     
-    val distinctSubjects = remember(viewModel.scheduleList) {
-        viewModel.scheduleList.mapNotNull { it.subject }.distinct()
+    if (selectedSection == null) {
+        AssignedSectionsScreen(
+            sections = viewModel.sections,
+            students = viewModel.students,
+            onSectionClick = { selectedSection = it }
+        )
+    } else {
+        SectionStudentsScreen(
+            section = selectedSection!!,
+            viewModel = viewModel,
+            onBack = { selectedSection = null }
+        )
     }
-    
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        // Curved Header
+}
+
+@Composable
+fun AssignedSectionsScreen(
+    sections: List<com.example.mymy.data.model.Section>,
+    students: List<User>,
+    onSectionClick: (com.example.mymy.data.model.Section) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(140.dp),
             color = DeepGreen,
@@ -420,127 +439,248 @@ fun StudentManagement(viewModel: TeacherViewModel, onAddGrade: (User) -> Unit, c
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                 Column {
-                    Text("Student Directory", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Manage student records and grades", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    Text("My Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Select a section to manage students", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        if (sections.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(64.dp), tint = LightGreen)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No sections assigned yet", color = LightText)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(sections) { section ->
+                    val studentCount = remember(students, section.id) {
+                        students.count { it.sectionId == section.id }
+                    }
+                    SectionCard(section = section, studentCount = studentCount, onClick = { onSectionClick(section) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionCard(section: com.example.mymy.data.model.Section, studentCount: Int, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White,
+        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+    ) {
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(60.dp),
+                color = LightGreen,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Class, null, tint = DeepGreen, modifier = Modifier.padding(16.dp))
+            }
+            
+            Spacer(modifier = Modifier.width(20.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${section.gradeLevel} — ${section.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = DeepGreen
+                )
+                Text("S.Y. 2025-2026", style = MaterialTheme.typography.bodySmall, color = LightText)
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, null, modifier = Modifier.size(14.dp), tint = DeepGreen)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Adviser: Teacher", style = MaterialTheme.typography.labelSmall, color = DeepGreen)
+                }
+            }
+            
+            Column(horizontalAlignment = Alignment.End) {
+                Text(studentCount.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = DeepGreen)
+                Text("Students", style = MaterialTheme.typography.labelSmall, color = LightText)
+            }
+        }
+    }
+}
+
+@Composable
+fun SectionStudentsScreen(
+    section: com.example.mymy.data.model.Section,
+    viewModel: TeacherViewModel,
+    onBack: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    val sectionStudents = remember(viewModel.students, section.id) {
+        viewModel.students.filter { it.sectionId == section.id }
+    }
+    
+    val filteredStudents = sectionStudents.filter {
+        (it.name ?: "").contains(searchQuery, ignoreCase = true) || 
+        (it.studentNo ?: "").contains(searchQuery, ignoreCase = true)
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(120.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                }
+                Column {
+                    Text(section.name, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("${section.gradeLevel} • ${sectionStudents.size} Students", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
 
         Column(modifier = Modifier.padding(24.dp)) {
-            Text("QUICK FILTER", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Schedule Filter
-            if (distinctSubjects.isNotEmpty()) {
-                // Safely calculate index: "My Students" is index 0, subjects are 1..N
-                val rawIndex = if (selectedSubject == null) 0 else distinctSubjects.indexOf(selectedSubject) + 1
-                // Ensure index is within bounds of (1 + subjects size)
-                val safeSelectedIndex = if (rawIndex < 0 || rawIndex > distinctSubjects.size) 0 else rawIndex
-                
-                ScrollableTabRow(
-                    selectedTabIndex = safeSelectedIndex,
-                    containerColor = Color.Transparent,
-                    contentColor = DeepGreen,
-                    edgePadding = 0.dp,
-                    divider = {}
-                ) {
-                    Tab(
-                        selected = safeSelectedIndex == 0,
-                        onClick = { selectedSubject = null },
-                        text = { Text("My Students") }
-                    )
-                    distinctSubjects.forEachIndexed { index, subject ->
-                        Tab(
-                            selected = safeSelectedIndex == index + 1,
-                            onClick = { selectedSubject = subject },
-                            text = { Text(subject) }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Search student name or ID") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Close, "Clear Search")
-                        }
-                    }
-                },
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color(0xFFF0F0F0))
             )
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            val filteredStudents = remember(viewModel.students, selectedSubject, searchQuery, viewModel.scheduleList) {
-                try {
-                    var list = if (selectedSubject == null) {
-                        viewModel.students
-                    } else {
-                        viewModel.students.filter { student ->
-                           viewModel.scheduleList.any { it.subject == selectedSubject && (it.studentId == student.id || it.studentId == student.studentNo) }
-                        }
-                    }
-
-                    if (searchQuery.isNotBlank()) {
-                        list = list.filter { 
-                            (it.name ?: "").contains(searchQuery, ignoreCase = true) || 
-                            (it.studentNo?.contains(searchQuery, ignoreCase = true) == true)
-                        }
-                    }
-                    list.sortedBy { it.name ?: "" }
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
+            Text("STUDENT LIST", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+            Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(filteredStudents) { student ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
-                    ) {
-                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(modifier = Modifier.size(48.dp), color = LightGreen, shape = RoundedCornerShape(12.dp)) {
-                                Icon(Icons.Default.Person, null, tint = DeepGreen, modifier = Modifier.padding(12.dp))
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
-                                Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.bodySmall, color = LightText)
-                                Text("Guardian: ${student.guardianName ?: "Not Specified"}", style = MaterialTheme.typography.bodySmall, color = DeepGreen, fontWeight = FontWeight.Medium)
-                            }
-                            IconButton(onClick = { 
-                                // Pass the student and current subject context if possible
-                                onAddGrade(student) 
-                            }) {
-                                Icon(Icons.Default.EditNote, "Add Grade", tint = DeepGreen)
-                            }
+                    StudentGradeRow(
+                        student = student,
+                        subjects = viewModel.scheduleList.mapNotNull { it.subject }.distinct(),
+                        onSaveGrade = { subj, score, remark ->
+                            viewModel.uploadGrade(student.id, subj, score, remark)
                         }
-                    }
+                    )
                 }
                 
                 if (filteredStudents.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.PeopleOutline, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("No students enrolled in this class", color = LightText, style = MaterialTheme.typography.bodyMedium)
-                            }
+                            Text("No students found", color = LightText)
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentGradeRow(
+    student: User,
+    subjects: List<String>,
+    onSaveGrade: (String, Double, String) -> Unit
+) {
+    var score by remember { mutableStateOf("") }
+    var selectedSubject by remember { mutableStateOf(subjects.firstOrNull() ?: "General") }
+    var selectedRemark by remember { mutableStateOf("Passed") }
+    var showMenu by remember { mutableStateOf(false) }
+    var showSubjectMenu by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(modifier = Modifier.size(40.dp), color = LightGreen, shape = RoundedCornerShape(10.dp)) {
+                    Icon(Icons.Default.Person, null, tint = DeepGreen, modifier = Modifier.padding(8.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
+                    Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.bodySmall, color = LightText)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Subject Dropdown
+                Box(modifier = Modifier.weight(1.2f)) {
+                    OutlinedButton(
+                        onClick = { showSubjectMenu = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(selectedSubject, maxLines = 1, fontSize = 12.sp, color = DeepGreen)
+                    }
+                    DropdownMenu(expanded = showSubjectMenu, onDismissRequest = { showSubjectMenu = false }) {
+                        subjects.forEach { subj ->
+                            DropdownMenuItem(text = { Text(subj) }, onClick = { selectedSubject = subj; showSubjectMenu = false })
+                        }
+                    }
+                }
+
+                // Grade Input
+                OutlinedTextField(
+                    value = score,
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) score = it },
+                    modifier = Modifier.weight(0.8f),
+                    placeholder = { Text("0-100", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                )
+
+                // Remarks Dropdown
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(selectedRemark, fontSize = 12.sp, color = DeepGreen)
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        listOf("Passed", "Failed", "Incomplete").forEach { remark ->
+                            DropdownMenuItem(text = { Text(remark) }, onClick = { selectedRemark = remark; showMenu = false })
+                        }
+                    }
+                }
+
+                    IconButton(
+                        onClick = { 
+                            val s = score.toDoubleOrNull()
+                            if (s != null && s in 0.0..100.0) {
+                                onSaveGrade(selectedSubject, s, selectedRemark)
+                            }
+                        },
+                        modifier = Modifier.size(40.dp).background(DeepGreen, RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
             }
         }
     }

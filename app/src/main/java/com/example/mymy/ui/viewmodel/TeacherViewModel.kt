@@ -10,6 +10,7 @@ import com.example.mymy.data.model.Attendance
 import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Grade
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.model.Section
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.data.remote.SupabaseConfig
@@ -23,6 +24,7 @@ import java.util.Locale
 class TeacherViewModel : ViewModel() {
     var students by mutableStateOf<List<User>>(emptyList())
     var scheduleList by mutableStateOf<List<Schedule>>(emptyList())
+    var sections by mutableStateOf<List<Section>>(emptyList())
     var enrollments by mutableStateOf<List<Enrollment>>(emptyList())
     var userProfile by mutableStateOf<User?>(null)
     var studentGrades by mutableStateOf<Map<String, List<Grade>>>(emptyMap()) // studentId -> list of grades
@@ -73,6 +75,20 @@ class TeacherViewModel : ViewModel() {
                 }
                 scheduleList = fetchedSchedules
                 Log.d("TeacherVM", "Matched ${fetchedSchedules.size} schedules")
+
+                // 2.5 Fetch Sections
+                val allSections = try {
+                    SupabaseConfig.client.postgrest["sections"].select().decodeList<Section>()
+                } catch (e: Exception) {
+                    Log.e("TeacherVM", "Error fetching sections", e)
+                    emptyList()
+                }
+                
+                val sectionIdsFromSchedules = fetchedSchedules.mapNotNull { it.sectionId }.toSet()
+                sections = allSections.filter { 
+                    it.adviserId == userId || (customTeacherId != null && it.adviserId == customTeacherId) || it.id in sectionIdsFromSchedules
+                }
+                Log.d("TeacherVM", "Matched ${sections.size} sections")
 
                 // 3. Fetch Enrollments for these schedules (Plan A)
                 val scheduleIds = fetchedSchedules.mapNotNull { it.id }
