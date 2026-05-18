@@ -15,6 +15,7 @@ import com.example.mymy.data.model.Subject
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.data.remote.SupabaseConfig
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.postgrest
 import io.ktor.client.statement.bodyAsText
@@ -33,6 +34,7 @@ class SchoolAdminViewModel : ViewModel() {
     var allAttendance by mutableStateOf<List<Attendance>>(emptyList())
     var allSections by mutableStateOf<List<Section>>(emptyList())
     var allSubjects by mutableStateOf<List<Subject>>(emptyList())
+    var userProfile by mutableStateOf<User?>(null)
     
     var searchQuery by mutableStateOf("")
     var roleFilter by mutableStateOf<UserRole?>(null)
@@ -47,12 +49,19 @@ class SchoolAdminViewModel : ViewModel() {
         
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
+    var successMessage by mutableStateOf<String?>(null)
 
     fun fetchData() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
+                // Fetch current user profile
+                val currentUser = SupabaseConfig.client.auth.retrieveUserForCurrentSession(false)
+                userProfile = SupabaseConfig.client.postgrest["profiles"]
+                    .select { filter { eq("id", currentUser.id) } }
+                    .decodeSingleOrNull<User>()
+
                 // Fetch all profiles at once to reduce calls
                 val allProfiles = SupabaseConfig.client.postgrest["profiles"]
                     .select()
@@ -108,79 +117,25 @@ class SchoolAdminViewModel : ViewModel() {
         }
     }
 
-    fun saveSchedules(schedules: List<Schedule>) {
-        viewModelScope.launch {
-            try {
-                // Conflict detection check
-                for (s in schedules) {
-                    val conflict = allSchedules.find { existing ->
-                        existing.day == s.day &&
-                        existing.room == s.room &&
-                        existing.id != s.id &&
-                        isOverlapping(existing.startTime, existing.endTime, s.startTime, s.endTime)
-                    }
-                    if (conflict != null) {
-                        errorMessage = "Conflict: Room ${s.room} is already booked on ${s.day} at ${conflict.startTime}-${conflict.endTime}"
-                        return@launch
-                    }
-                    
-                    val teacherConflict = allSchedules.find { existing ->
-                        existing.day == s.day &&
-                        existing.teacherId == s.teacherId &&
-                        existing.id != s.id &&
-                        isOverlapping(existing.startTime, existing.endTime, s.startTime, s.endTime)
-                    }
-                    if (teacherConflict != null) {
-                        errorMessage = "Conflict: Teacher is already teaching on ${s.day} at ${teacherConflict.startTime}-${teacherConflict.endTime}"
-                        return@launch
-                    }
-                }
-
-                SupabaseConfig.client.postgrest["schedules"].insert(schedules)
-
-                // Update section status and student status if section-based
-                val sectionIds = schedules.mapNotNull { it.sectionId }.distinct()
-                if (sectionIds.isNotEmpty()) {
-                    SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Scheduled")) {
-                        filter { isIn("id", sectionIds) }
-                    }
-                    
-                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("status" to "Assigned")) {
-                        filter { isIn("section_id", sectionIds) }
-                    }
-                }
-
-                fetchData() 
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Failed to save schedules"
-            }
-        }
-    }
-
-    private fun isOverlapping(s1: String?, e1: String?, s2: String?, e2: String?): Boolean {
-        if (s1 == null || e1 == null || s2 == null || e2 == null) return false
-        
-        // Simple string comparison for HH:mm:ss
-        // Standard overlap: (StartA < EndB) and (EndA > StartB)
-        // This handles:
-        // 1. A contains B
-        // 2. B contains A
-        // 3. A starts before B and ends after B starts
-        // 4. B starts before A and ends after A starts
-        return s1 < e2 && e1 > s2
-    }
-
-    fun saveSchedule(schedule: Schedule) {
-        saveSchedules(listOf(schedule))
-    }
-
     fun deleteSchedule(id: Long) {
         viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            successMessage = null
             try {
-                // Find the schedule first to check if it's section-based
+                // Find the schedule first
                 val scheduleToDelete = allSchedules.find { it.id == id }
                 
-                // Also delete related enrollments
+                // 1. Delete related attendance
+                try {
+                    SupabaseConfig.client.postgrest["attendance"].delete {
+                        filter { eq("schedule_id", id) }
+                    }
+                } catch (e: Exception) {
+                    Log.w("SchoolAdminVM", "Could not delete attendance for schedule $id", e)
+                }
+
+                // 2. Delete related enrollments
                 try {
                     SupabaseConfig.client.postgrest["enrollments"].delete {
                         filter { eq("schedule_id", id) }
@@ -189,9 +144,10 @@ class SchoolAdminViewModel : ViewModel() {
                     Log.w("SchoolAdminVM", "Could not delete enrollments for schedule $id", e)
                 }
 
+                // 3. Delete the schedule
                 SupabaseConfig.client.postgrest["schedules"].delete { filter { eq("id", id) } }
 
-                // If it was a section schedule, re-check if the section has other schedules
+                // 3. Update section/student status if needed
                 scheduleToDelete?.sectionId?.let { sId ->
                     val otherSchedules = SupabaseConfig.client.postgrest["schedules"]
                         .select { filter { eq("section_id", sId) } }
@@ -207,20 +163,79 @@ class SchoolAdminViewModel : ViewModel() {
                     }
                 }
 
+                successMessage = "Schedule deleted successfully"
                 fetchData()
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to delete schedule"
+            } finally {
+                isLoading = false
             }
         }
     }
 
     fun deleteUser(id: String) {
         viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            successMessage = null
             try {
+                // 1. Delete Attendance
+                try {
+                    SupabaseConfig.client.postgrest["attendance"].delete {
+                        filter {
+                            or {
+                                eq("student_id", id)
+                                eq("teacher_id", id)
+                            }
+                        }
+                    }
+                } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup attendance failed", e) }
+                
+                // 2. Delete Grades
+                try {
+                    SupabaseConfig.client.postgrest["grades"].delete {
+                        filter {
+                            or {
+                                eq("student_id", id)
+                                eq("teacher_id", id)
+                            }
+                        }
+                    }
+                } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup grades failed", e) }
+                
+                // 3. Delete Enrollments
+                try {
+                    SupabaseConfig.client.postgrest["enrollments"].delete {
+                        filter { eq("student_id", id) }
+                    }
+                } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup enrollments failed", e) }
+
+                // 4. Nullify Teacher/Adviser/Parent/Child references
+                try {
+                    SupabaseConfig.client.postgrest["schedules"].update(mapOf("teacher_id" to null)) {
+                        filter { eq("teacher_id", id) }
+                    }
+                    SupabaseConfig.client.postgrest["sections"].update(mapOf("adviser_id" to null)) {
+                        filter { eq("adviser_id", id) }
+                    }
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("child_id" to null)) {
+                        filter { eq("child_id", id) }
+                    }
+                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("parent_id" to null)) {
+                        filter { eq("parent_id", id) }
+                    }
+                } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup references failed", e) }
+                
+                // 5. Delete Profile
                 SupabaseConfig.client.postgrest["profiles"].delete { filter { eq("id", id) } }
+                
+                successMessage = "User deleted successfully"
                 fetchData()
             } catch (e: Exception) {
-                errorMessage = e.message ?: "Failed to delete user"
+                Log.e("SchoolAdminVM", "Delete user failed", e)
+                errorMessage = "Failed to delete user: ${e.message}"
+            } finally {
+                isLoading = false
             }
         }
     }
@@ -257,17 +272,14 @@ class SchoolAdminViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // 1. Update section details
                 SupabaseConfig.client.postgrest["sections"].update(section) {
                     filter { eq("id", sectionId) }
                 }
                 
-                // 2. Clear existing members
                 SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
                     filter { eq("section_id", sectionId) }
                 }
 
-                // 3. Assign new members
                 if (studentIds.isNotEmpty()) {
                     SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
                         filter { isIn("id", studentIds) }
@@ -283,48 +295,44 @@ class SchoolAdminViewModel : ViewModel() {
         }
     }
 
-    fun updateSectionMembers(sectionId: Long, studentIds: List<String>) {
-        viewModelScope.launch {
-            isLoading = true
-            errorMessage = null
-            try {
-                // 1. Clear existing members
-                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
-                    filter { eq("section_id", sectionId) }
-                }
-
-                // 2. Assign new members
-                if (studentIds.isNotEmpty()) {
-                    SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
-                        filter {
-                            isIn("id", studentIds)
-                        }
-                    }
-                }
-                fetchData()
-            } catch (e: Exception) {
-                Log.e("SchoolAdminVM", "Update section members failed", e)
-                errorMessage = "Failed to update section members: ${e.message}"
-            } finally {
-                isLoading = false
-            }
-        }
-    }
-
     fun deleteSection(sectionId: Long) {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
                 // 1. Detach all students
                 SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
                     filter { eq("section_id", sectionId) }
                 }
                 
-                // 2. Delete the section
+                // 2. Find and Delete related schedules and their enrollments/attendance
+                val schedules = SupabaseConfig.client.postgrest["schedules"]
+                    .select { filter { eq("section_id", sectionId) } }
+                    .decodeList<Schedule>()
+                
+                val scheduleIds = schedules.mapNotNull { it.id }
+                if (scheduleIds.isNotEmpty()) {
+                    try {
+                        SupabaseConfig.client.postgrest["attendance"].delete {
+                            filter { isIn("schedule_id", scheduleIds) }
+                        }
+                    } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup section attendance failed", e) }
+
+                    SupabaseConfig.client.postgrest["enrollments"].delete {
+                        filter { isIn("schedule_id", scheduleIds) }
+                    }
+                    SupabaseConfig.client.postgrest["schedules"].delete {
+                        filter { isIn("id", scheduleIds) }
+                    }
+                }
+
+                // 3. Delete the section
                 SupabaseConfig.client.postgrest["sections"].delete {
                     filter { eq("id", sectionId) }
                 }
+                
+                successMessage = "Section deleted successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Delete section failed", e)
@@ -374,10 +382,40 @@ class SchoolAdminViewModel : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
+                // 1. Find and Delete related schedules and their enrollments/attendance
+                val schedules = SupabaseConfig.client.postgrest["schedules"]
+                    .select { filter { eq("subject_id", id) } }
+                    .decodeList<Schedule>()
+                
+                val scheduleIds = schedules.mapNotNull { it.id }
+                if (scheduleIds.isNotEmpty()) {
+                    try {
+                        SupabaseConfig.client.postgrest["attendance"].delete {
+                            filter { isIn("schedule_id", scheduleIds) }
+                        }
+                    } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup subject schedule attendance failed", e) }
+
+                    SupabaseConfig.client.postgrest["enrollments"].delete {
+                        filter { isIn("schedule_id", scheduleIds) }
+                    }
+                    SupabaseConfig.client.postgrest["schedules"].delete {
+                        filter { isIn("id", scheduleIds) }
+                    }
+                }
+
+                // 2. Cleanup attendance and grades tied directly to subject_id
+                try {
+                    SupabaseConfig.client.postgrest["attendance"].delete { filter { eq("subject_id", id) } }
+                    SupabaseConfig.client.postgrest["grades"].delete { filter { eq("subject_id", id) } }
+                } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup subject records failed", e) }
+
+                // 3. Delete the subject
                 SupabaseConfig.client.postgrest["subjects"].delete {
                     filter { eq("id", id) }
                 }
+                successMessage = "Subject deleted successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Delete subject failed", e)
@@ -407,7 +445,6 @@ class SchoolAdminViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // Automatically generate unique IDs if not provided
                 val finalStudentId = if (role == UserRole.STUDENT) {
                     if (studentId.isNullOrBlank()) "STD-${UUID.randomUUID().toString().substring(0, 8).uppercase()}" else studentId
                 } else null
@@ -438,15 +475,7 @@ class SchoolAdminViewModel : ViewModel() {
                     gradeLevel = gradeLevel
                 )
                 
-                // Debug log to verify payload
-                val jsonPayload = Json.encodeToString(request)
-                Log.d("SchoolAdminVM", "Sending Registration Payload: $jsonPayload")
-                
-                // Call the Supabase Edge Function
-                Log.d("SchoolAdminVM", "Invoking rapid-processor for: ${request.email}")
-                val response = SupabaseConfig.client.functions.invoke("rapid-processor", request)
-                Log.d("SchoolAdminVM", "Edge function response: ${response.bodyAsText()}")
-                
+                SupabaseConfig.client.functions.invoke("rapid-processor", request)
                 fetchData()
             } catch (e: Exception) {
                 errorMessage = "Failed to create user: ${e.message}"
@@ -461,7 +490,7 @@ class SchoolAdminViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // 1. Conflict Detection
+                // Conflict Detection
                 val conflict = allSchedules.find { existing ->
                     existing.day == schedule.day &&
                     existing.room == schedule.room &&
@@ -486,7 +515,6 @@ class SchoolAdminViewModel : ViewModel() {
                     return@launch
                 }
 
-                // 2. Save Schedule Record
                 val masterSchedule = schedule
                 val response = if (masterSchedule.id == null) {
                     SupabaseConfig.client.postgrest["schedules"].insert(masterSchedule) { select() }
@@ -500,7 +528,6 @@ class SchoolAdminViewModel : ViewModel() {
                 val savedSchedule = response.decodeSingle<Schedule>()
                 val scheduleId = savedSchedule.id ?: throw Exception("Failed to retrieve saved schedule ID")
 
-                // If it's a section schedule, update section and student status
                 savedSchedule.sectionId?.let { sId ->
                     SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Scheduled")) {
                         filter { eq("id", sId) }
@@ -510,13 +537,10 @@ class SchoolAdminViewModel : ViewModel() {
                     }
                 }
 
-                // 3. Update Enrollments
-                // Delete existing ones
                 SupabaseConfig.client.postgrest["enrollments"].delete {
                     filter { eq("schedule_id", scheduleId) }
                 }
                 
-                // Insert new ones
                 if (studentIds.isNotEmpty()) {
                     val enrollments = studentIds.map { Enrollment(scheduleId = scheduleId, studentId = it) }
                     SupabaseConfig.client.postgrest["enrollments"].insert(enrollments)
@@ -526,6 +550,30 @@ class SchoolAdminViewModel : ViewModel() {
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Bulk enrollment failed", e)
                 errorMessage = "Bulk enrollment failed: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    private fun isOverlapping(s1: String?, e1: String?, s2: String?, e2: String?): Boolean {
+        if (s1 == null || e1 == null || s2 == null || e2 == null) return false
+        return s1 < e2 && e1 > s2
+    }
+
+    fun updateProfile(updatedUser: User) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["profiles"].update(updatedUser) {
+                    filter { eq("id", updatedUser.id) }
+                }
+                userProfile = updatedUser
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Update profile failed", e)
+                errorMessage = "Failed to update profile: ${e.message}"
             } finally {
                 isLoading = false
             }

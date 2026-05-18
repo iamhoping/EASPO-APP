@@ -31,6 +31,7 @@ import com.example.mymy.data.model.Schedule
 import com.example.mymy.data.model.Section
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
+import com.example.mymy.ui.components.ProfileDashboard
 import com.example.mymy.ui.theme.BackgroundColor
 import com.example.mymy.ui.theme.DeepGreen
 import com.example.mymy.ui.theme.LightGreen
@@ -299,11 +300,24 @@ fun SchoolAdminScreen(
                             unselectedTextColor = Color.White.copy(alpha = 0.6f)
                         )
                     )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.AccountCircle, "Profile") },
+                        label = { Text("Profile") },
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color.White,
+                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                            indicatorColor = SageGreen,
+                            selectedTextColor = Color.White,
+                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        )
+                    )
                 }
             }
         },
         floatingActionButton = {
-            if (selectedTab != 0) {
+            if (selectedTab != 0 && selectedTab != 5) {
                 FloatingActionButton(
                     onClick = {
                         when (selectedTab) {
@@ -408,6 +422,13 @@ fun SchoolAdminScreen(
                                 editingSubject = it
                                 showSubjectDialog = true
                             }
+                        )
+                    }
+                    5 -> {
+                        ProfileDashboard(
+                            user = viewModel.userProfile,
+                            onUpdate = { viewModel.updateProfile(it) },
+                            onLogout = onLogout
                         )
                     }
                 }
@@ -922,10 +943,10 @@ fun AdminScheduleList(
                             Text("Teacher: $teacherName", modifier = Modifier.padding(start = 8.dp), color = LightText, style = MaterialTheme.typography.bodyMedium)
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Icon(Icons.Default.Group, null, modifier = Modifier.size(16.dp), tint = LightText)
-                            Text("$studentCount Students Enrolled", modifier = Modifier.padding(start = 8.dp), color = LightText, style = MaterialTheme.typography.bodyMedium)
-                        }
+                        //Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                          //  Icon(Icons.Default.Group, null, modifier = Modifier.size(16.dp), tint = LightText)
+                            //Text("$studentCount Students Enrolled", modifier = Modifier.padding(start = 8.dp), color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        //}
                     }
                 }
             }
@@ -1761,7 +1782,7 @@ fun ManageScheduleDialog(
                     }
                 }
 
-                Text("Enrolled Students", style = MaterialTheme.typography.labelMedium, color = DeepGreen, fontWeight = FontWeight.Bold)
+               /* Text("Enrolled Students", style = MaterialTheme.typography.labelMedium, color = DeepGreen, fontWeight = FontWeight.Bold)
                 Surface(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
                     shape = RoundedCornerShape(12.dp),
@@ -1788,7 +1809,7 @@ fun ManageScheduleDialog(
                             }
                         }
                     }
-                }
+                }*/
 
                 if (schedule.id != null) {
                     TextButton(

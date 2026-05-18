@@ -202,12 +202,10 @@ fun ProfileDashboard(
                         icon = Icons.Default.Home
                     )
 
-                    EditableField(
-                        label = "Gender",
-                        value = gender,
-                        onValueChange = { gender = it },
-                        isEditing = isEditing,
-                        icon = Icons.Default.Wc
+                    GenderDropdownField(
+                        gender = gender,
+                        onGenderChange = { gender = it },
+                        isEditing = isEditing
                     )
 
                     if (user.role == UserRole.STUDENT) {
@@ -260,6 +258,80 @@ fun ProfileDashboard(
             }
             
             Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GenderDropdownField(
+    gender: String,
+    onGenderChange: (String) -> Unit,
+    isEditing: Boolean
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val genders = listOf("Male", "Female")
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp).offset(y = if (isEditing) 8.dp else 0.dp),
+            color = if (isEditing) LightGreen.copy(alpha = 0.3f) else Color(0xFFF0F4F8),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(
+                Icons.Default.Wc,
+                contentDescription = null,
+                modifier = Modifier.padding(10.dp),
+                tint = if (isEditing) DeepGreen else Color.Gray
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            if (isEditing) {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = gender,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Gender") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DeepGreen,
+                            focusedLabelColor = DeepGreen
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        genders.forEach { g ->
+                            DropdownMenuItem(
+                                text = { Text(g) },
+                                onClick = {
+                                    onGenderChange(g)
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text("Gender", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text(
+                    text = if (gender.isEmpty()) "Not provided" else gender,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = if (gender.isEmpty()) Color.LightGray else Color.Black
+                )
+            }
         }
     }
 }
