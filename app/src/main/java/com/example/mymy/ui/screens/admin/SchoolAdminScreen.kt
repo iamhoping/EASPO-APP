@@ -221,6 +221,7 @@ fun SchoolAdminScreen(
     var editingSubject by remember { mutableStateOf<com.example.mymy.data.model.Subject?>(null) }
     var showAttendanceLog by remember { mutableStateOf(false) }
     var userToDelete by remember { mutableStateOf<User?>(null) }
+    var sectionToDelete by remember { mutableStateOf<Section?>(null) }
     var viewingSection by remember { mutableStateOf<Section?>(null) }
 
     Scaffold(
@@ -317,7 +318,7 @@ fun SchoolAdminScreen(
             }
         },
         floatingActionButton = {
-            if (selectedTab != 0 && selectedTab != 5) {
+            if (selectedTab != 0 && selectedTab != 5 && selectedTab != 3) {
                 FloatingActionButton(
                     onClick = {
                         when (selectedTab) {
@@ -325,10 +326,6 @@ fun SchoolAdminScreen(
                             2 -> {
                                 editingSchedule = Schedule(subject = "", day = "Monday", startTime = "08:00:00", endTime = "09:00:00", room = "")
                                 showScheduleDialog = true
-                            }
-                            3 -> {
-                                editingSection = Section(name = "", gradeLevel = "7")
-                                showSectionDialog = true
                             }
                             4 -> {
                                 editingSubject = com.example.mymy.data.model.Subject(name = "", code = "", gradeLevel = "7")
@@ -364,7 +361,25 @@ fun SchoolAdminScreen(
                 }
             }
 
-            if (isLoading) {
+            // Success message display
+            viewModel.successMessage?.let { success ->
+                Card(
+                    modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, null, tint = DeepGreen)
+                        Spacer(Modifier.width(8.dp))
+                        Text(success, color = DeepGreen, fontSize = 14.sp)
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = { viewModel.successMessage = null }) {
+                            Icon(Icons.Default.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            if (viewModel.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = DeepGreen)
                 }
@@ -401,16 +416,20 @@ fun SchoolAdminScreen(
                             SectionList(
                                 sections = sections,
                                 users = users,
-                                onSectionClick = { viewingSection = it }
+                                onSectionClick = { viewingSection = it },
+                                onDeleteSection = { sectionToDelete = it }
                             )
                         } else {
                             SectionDetailView(
                                 section = viewingSection!!,
                                 students = users.filter { it.sectionId == viewingSection!!.id },
+                                allUsers = users,
                                 onBack = { viewingSection = null },
-                                onEdit = {
-                                    editingSection = viewingSection
-                                    showSectionDialog = true
+                                onRemoveStudent = { student ->
+                                    viewModel.updateProfile(student.copy(sectionId = null))
+                                },
+                                onAddStudent = { student ->
+                                    viewModel.updateProfile(student.copy(sectionId = viewingSection!!.id))
                                 }
                             )
                         }
@@ -533,6 +552,29 @@ fun SchoolAdminScreen(
 
         if (showAttendanceLog) {
             // ... existing attendance dialog ...
+        }
+
+        if (sectionToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { sectionToDelete = null },
+                icon = { Icon(Icons.Default.DeleteForever, null, tint = ErrorColor) },
+                title = { Text("Delete Section") },
+                text = { Text("Are you sure you want to delete section '${sectionToDelete?.name}'? This will unassign all students and delete related schedules.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            sectionToDelete?.id?.let { viewModel.deleteSection(it) }
+                            sectionToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { sectionToDelete = null }) { Text("Cancel") }
+                }
+            )
         }
 
         if (userToDelete != null) {
@@ -970,7 +1012,8 @@ fun AdminScheduleList(
 fun SectionList(
     sections: List<Section>,
     users: List<User>,
-    onSectionClick: (Section) -> Unit
+    onSectionClick: (Section) -> Unit,
+    onDeleteSection: (Section) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -1004,11 +1047,16 @@ fun SectionList(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(section.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
                             Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodyMedium)
                         }
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                        Row {
+                            IconButton(onClick = { onDeleteSection(section) }) {
+                                Icon(Icons.Default.Delete, "Delete", tint = ErrorColor)
+                            }
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                        }
                     }
                 }
             }
@@ -1032,9 +1080,25 @@ fun SectionList(
 fun SectionDetailView(
     section: Section,
     students: List<User>,
+    allUsers: List<User> = emptyList(),
     onBack: () -> Unit,
-    onEdit: () -> Unit
+    onRemoveStudent: (User) -> Unit,
+    onAddStudent: (User) -> Unit = {}
 ) {
+    var showAddStudentDialog by remember { mutableStateOf(false) }
+
+    if (showAddStudentDialog) {
+        AddStudentToSectionDialog(
+            section = section,
+            allUsers = allUsers,
+            onDismiss = { showAddStudentDialog = false },
+            onAddStudent = {
+                onAddStudent(it)
+                showAddStudentDialog = false
+            }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(160.dp),
@@ -1049,21 +1113,31 @@ fun SectionDetailView(
                     Text("Grade ${section.gradeLevel}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                     Text(section.name, color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 }
-                
-                IconButton(onClick = onEdit, modifier = Modifier.align(Alignment.TopEnd)) {
-                    Icon(Icons.Default.Edit, "Edit", tint = Color.White)
-                }
             }
         }
 
         Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = "ENROLLED STUDENTS (${students.size})",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = DeepGreen,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ENROLLED STUDENTS (${students.size})",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = DeepGreen
+                )
+                
+                TextButton(
+                    onClick = { showAddStudentDialog = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = DeepGreen)
+                ) {
+                    Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add Student")
+                }
+            }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -1094,7 +1168,7 @@ fun SectionDetailView(
                                 }
                             }
                             
-                            Column(modifier = Modifier.padding(start = 16.dp)) {
+                            Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
                                 Text(
                                     student.name ?: "Unknown",
                                     fontWeight = FontWeight.Bold,
@@ -1105,6 +1179,10 @@ fun SectionDetailView(
                                     color = LightText,
                                     style = MaterialTheme.typography.bodySmall
                                 )
+                            }
+                            
+                            IconButton(onClick = { onRemoveStudent(student) }) {
+                                Icon(Icons.Default.Delete, "Remove Student", tint = ErrorColor.copy(alpha = 0.7f))
                             }
                         }
                     }
@@ -1120,6 +1198,74 @@ fun SectionDetailView(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddStudentToSectionDialog(
+    section: Section,
+    allUsers: List<User>,
+    onDismiss: () -> Unit,
+    onAddStudent: (User) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // Filter users who are students, match the grade level, and aren't in a section yet
+    val availableStudents = remember(allUsers, section, searchQuery) {
+        allUsers.filter { user ->
+            user.role == UserRole.STUDENT &&
+            user.gradeLevel == section.gradeLevel &&
+            user.sectionId == null &&
+            (searchQuery.isEmpty() || (user.name?.contains(searchQuery, ignoreCase = true) == true) || (user.studentNo?.contains(searchQuery) == true))
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Student to ${section.name}") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search Students") },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    shape = RoundedCornerShape(12.dp)
+                )
+                
+                if (availableStudents.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("No available students found for Grade ${section.gradeLevel}", color = LightText)
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(availableStudents) { student ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable { onAddStudent(student) },
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SageGreen.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold)
+                                        Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.bodySmall, color = LightText)
+                                    }
+                                    Icon(Icons.Default.Add, null, tint = DeepGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

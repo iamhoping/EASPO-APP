@@ -256,6 +256,7 @@ class SchoolAdminViewModel : ViewModel() {
                         filter { isIn("id", studentIds) }
                     }
                 }
+                successMessage = "Section created successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Create section failed", e)
@@ -285,6 +286,7 @@ class SchoolAdminViewModel : ViewModel() {
                         filter { isIn("id", studentIds) }
                     }
                 }
+                successMessage = "Section updated successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Update section failed", e)
@@ -347,8 +349,10 @@ class SchoolAdminViewModel : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
                 SupabaseConfig.client.postgrest["subjects"].insert(subject)
+                successMessage = "Subject created successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Create subject failed", e)
@@ -364,10 +368,12 @@ class SchoolAdminViewModel : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
                 SupabaseConfig.client.postgrest["subjects"].update(subject) {
                     filter { eq("id", id) }
                 }
+                successMessage = "Subject updated successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Update subject failed", e)
@@ -476,6 +482,7 @@ class SchoolAdminViewModel : ViewModel() {
                 )
                 
                 SupabaseConfig.client.functions.invoke("rapid-processor", request)
+                successMessage = "User registered successfully"
                 fetchData()
             } catch (e: Exception) {
                 errorMessage = "Failed to create user: ${e.message}"
@@ -489,6 +496,7 @@ class SchoolAdminViewModel : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
                 // Conflict Detection
                 val conflict = allSchedules.find { existing ->
@@ -546,6 +554,7 @@ class SchoolAdminViewModel : ViewModel() {
                     SupabaseConfig.client.postgrest["enrollments"].insert(enrollments)
                 }
                 
+                successMessage = if (schedule.id == null) "Schedule created successfully" else "Schedule updated successfully"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Bulk enrollment failed", e)
@@ -565,11 +574,20 @@ class SchoolAdminViewModel : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            successMessage = null
             try {
                 SupabaseConfig.client.postgrest["profiles"].update(updatedUser) {
                     filter { eq("id", updatedUser.id) }
                 }
-                userProfile = updatedUser
+                
+                // Only update local userProfile if it's the admin's own profile being edited
+                if (userProfile?.id == updatedUser.id) {
+                    userProfile = updatedUser
+                    successMessage = "Profile updated successfully"
+                } else {
+                    successMessage = "Record for ${updatedUser.name ?: "user"} updated"
+                }
+
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Update profile failed", e)
