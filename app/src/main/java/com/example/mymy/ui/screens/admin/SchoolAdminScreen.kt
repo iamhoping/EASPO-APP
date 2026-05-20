@@ -417,7 +417,11 @@ fun SchoolAdminScreen(
                                 sections = sections,
                                 users = users,
                                 onSectionClick = { viewingSection = it },
-                                onDeleteSection = { sectionToDelete = it }
+                                onDeleteSection = { sectionToDelete = it },
+                                onCreateSection = {
+                                    editingSection = Section(name = "", gradeLevel = "7")
+                                    showSectionDialog = true
+                                }
                             )
                         } else {
                             SectionDetailView(
@@ -1013,65 +1017,79 @@ fun SectionList(
     sections: List<Section>,
     users: List<User>,
     onSectionClick: (Section) -> Unit,
-    onDeleteSection: (Section) -> Unit
+    onDeleteSection: (Section) -> Unit,
+    onCreateSection: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().height(140.dp),
-            color = DeepGreen,
-            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
-        ) {
-            Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                Column {
-                    Text("Section Management", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("${sections.size} Active Sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+                color = DeepGreen,
+                shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+            ) {
+                Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    Column {
+                        Text("Section Management", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("${sections.size} Active Sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 24.dp)
+            ) {
+                items(sections) { section ->
+                    val studentCount = users.count { it.sectionId == section.id }
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { onSectionClick(section) },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(section.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
+                                Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { onDeleteSection(section) }) {
+                                    Icon(Icons.Default.Delete, "Delete", tint = ErrorColor.copy(alpha = 0.7f))
+                                }
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                            }
+                        }
+                    }
+                }
+                
+                if (sections.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Class, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("No sections created yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 24.dp)
+        FloatingActionButton(
+            onClick = onCreateSection,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp),
+            containerColor = DeepGreen,
+            contentColor = Color.White
         ) {
-            items(sections) { section ->
-                val studentCount = users.count { it.sectionId == section.id }
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onSectionClick(section) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(section.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
-                            Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodyMedium)
-                        }
-                        Row {
-                            IconButton(onClick = { onDeleteSection(section) }) {
-                                Icon(Icons.Default.Delete, "Delete", tint = ErrorColor)
-                            }
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
-                        }
-                    }
-                }
-            }
-            
-            if (sections.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Class, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No sections created yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
+            Icon(Icons.Default.Add, "Create Section")
         }
     }
 }
