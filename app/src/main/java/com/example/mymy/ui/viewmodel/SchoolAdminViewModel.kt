@@ -570,13 +570,72 @@ class SchoolAdminViewModel : ViewModel() {
         return s1 < e2 && e1 > s2
     }
 
+    fun addStudentToSection(studentId: String, sectionId: Long) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
+                    filter { eq("id", studentId) }
+                }
+                successMessage = "Student added to section successfully"
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Add student failed", e)
+                errorMessage = "Failed to add student: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun removeStudentFromSection(studentId: String) {
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            try {
+                SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
+                    filter { eq("id", studentId) }
+                }
+                successMessage = "Student removed from section successfully"
+                fetchData()
+            } catch (e: Exception) {
+                Log.e("SchoolAdminVM", "Remove student failed", e)
+                errorMessage = "Failed to remove student: ${e.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     fun updateProfile(updatedUser: User) {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             successMessage = null
             try {
-                SupabaseConfig.client.postgrest["profiles"].update(updatedUser) {
+                // Use a Map for the update to ensure null values (like section_id) are 
+                // explicitly sent to Supabase, bypassing potential null-skipping in serialization.
+                val updates = mutableMapOf<String, Any?>(
+                    "name" to updatedUser.name,
+                    "email" to updatedUser.email,
+                    "contact" to updatedUser.contact,
+                    "address" to updatedUser.address,
+                    "gender" to updatedUser.gender,
+                    "grade_level" to updatedUser.gradeLevel,
+                    "department" to updatedUser.department,
+                    "status" to updatedUser.status,
+                    "section_id" to updatedUser.sectionId,
+                    "guardian_name" to updatedUser.guardianName,
+                    "student_id" to updatedUser.studentNo,
+                    "teacher_id" to updatedUser.teacherId,
+                    "parent_id" to updatedUser.parentId,
+                    "child_id" to updatedUser.childId
+                )
+                
+                updatedUser.role?.let { updates["role"] = it.name }
+
+                SupabaseConfig.client.postgrest["profiles"].update(updates) {
                     filter { eq("id", updatedUser.id) }
                 }
                 

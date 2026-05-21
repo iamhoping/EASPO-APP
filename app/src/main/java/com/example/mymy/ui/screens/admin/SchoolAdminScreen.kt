@@ -223,6 +223,7 @@ fun SchoolAdminScreen(
     var userToDelete by remember { mutableStateOf<User?>(null) }
     var sectionToDelete by remember { mutableStateOf<Section?>(null) }
     var viewingSection by remember { mutableStateOf<Section?>(null) }
+    var studentToRemoveFromSection by remember { mutableStateOf<User?>(null) }
 
     Scaffold(
         bottomBar = {
@@ -426,14 +427,14 @@ fun SchoolAdminScreen(
                         } else {
                             SectionDetailView(
                                 section = viewingSection!!,
-                                students = users.filter { it.sectionId == viewingSection!!.id },
-                                allUsers = users,
+                                students = viewModel.allUsers.filter { it.sectionId == viewingSection?.id },
+                                allUsers = viewModel.allUsers,
                                 onBack = { viewingSection = null },
                                 onRemoveStudent = { student ->
-                                    viewModel.updateProfile(student.copy(sectionId = null))
+                                    studentToRemoveFromSection = student
                                 },
                                 onAddStudent = { student ->
-                                    viewModel.updateProfile(student.copy(sectionId = viewingSection!!.id))
+                                    viewModel.addStudentToSection(student.id, viewingSection!!.id!!)
                                 }
                             )
                         }
@@ -577,6 +578,28 @@ fun SchoolAdminScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { sectionToDelete = null }) { Text("Cancel") }
+                }
+            )
+        }
+
+        if (studentToRemoveFromSection != null) {
+            AlertDialog(
+                onDismissRequest = { studentToRemoveFromSection = null },
+                title = { Text("Remove Student") },
+                text = { Text("Are you sure you want to remove ${studentToRemoveFromSection!!.name} from ${viewingSection?.name}?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            studentToRemoveFromSection?.let { student ->
+                                viewModel.removeStudentFromSection(student.id)
+                            }
+                            studentToRemoveFromSection = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
+                    ) { Text("Remove", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { studentToRemoveFromSection = null }) { Text("Cancel") }
                 }
             )
         }
