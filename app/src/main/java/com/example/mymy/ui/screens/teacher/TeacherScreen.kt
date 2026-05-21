@@ -19,6 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -691,6 +694,20 @@ fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
     var selectedSubject by remember { mutableStateOf<String?>(null) }
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
     
+    val scanLauncher = rememberLauncherForActivityResult(
+        contract = ScanContract(),
+        onResult = { result ->
+            result.contents?.let { studentNo ->
+                val student = viewModel.students.find { it.studentNo == studentNo }
+                if (student != null) {
+                    viewModel.markAttendance(student.id, "Present", selectedSubject ?: "General")
+                } else {
+                    viewModel.errorMessage = "Student with ID $studentNo not found"
+                }
+            }
+        }
+    )
+
     val distinctSubjects = remember(viewModel.scheduleList) {
         viewModel.scheduleList.mapNotNull { it.subject }.distinct()
     }
@@ -703,9 +720,34 @@ fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                Column {
-                    Text("Mark Attendance", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Date: $today", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Mark Attendance", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Date: $today", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    }
+                    
+                    FilledTonalButton(
+                        onClick = {
+                            val options = ScanOptions()
+                            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            options.setPrompt("Scan Student ID QR Code")
+                            options.setBeepEnabled(true)
+                            options.setOrientationLocked(false)
+                            scanLauncher.launch(options)
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color.White.copy(alpha = 0.2f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Scan QR")
+                    }
                 }
             }
         }

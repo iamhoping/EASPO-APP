@@ -23,6 +23,10 @@ import com.example.mymy.ui.theme.LightGreen
 import com.example.mymy.ui.theme.LightText
 import com.example.mymy.ui.theme.SageGreen
 
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import com.example.mymy.util.BarcodeUtils
+
 @Composable
 fun ProfileDashboard(
     user: User?,
@@ -36,7 +40,14 @@ fun ProfileDashboard(
         return
     }
 
+    val context = LocalContext.current
     var isEditing by remember { mutableStateOf(false) }
+    var showQRCodeDialog by remember { mutableStateOf(false) }
+    
+    // QR Code generation based on student ID
+    val qrBitmap = remember(user.studentNo) {
+        user.studentNo?.let { BarcodeUtils.generateQRCode(it) }
+    }
     
     // Editable States
     var email by remember(user) { mutableStateOf(user.email) }
@@ -61,12 +72,12 @@ fun ProfileDashboard(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp),
+                .heightIn(min = 200.dp),
             color = DeepGreen,
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(vertical = 32.dp, horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -94,6 +105,18 @@ fun ProfileDashboard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.7f)
                 )
+
+                if ((user.role == UserRole.STUDENT || user.role?.name?.equals("STUDENT", ignoreCase = true) == true) && !user.studentNo.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { showQRCodeDialog = true },
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("View ID Barcode", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
 
@@ -259,6 +282,53 @@ fun ProfileDashboard(
             
             Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+
+    if (showQRCodeDialog && qrBitmap != null) {
+        AlertDialog(
+            onDismissRequest = { showQRCodeDialog = false },
+            title = { Text("Attendance QR Code", color = DeepGreen, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Student ID: ${user.studentNo}", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    androidx.compose.foundation.Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "Student QR Code",
+                        modifier = Modifier.size(250.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Present this code for attendance check",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        BarcodeUtils.saveBitmapToGallery(context, qrBitmap, "Student_QR_${user.studentNo}")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Download PNG")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQRCodeDialog = false }) {
+                    Text("Close")
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(28.dp)
+        )
     }
 }
 
