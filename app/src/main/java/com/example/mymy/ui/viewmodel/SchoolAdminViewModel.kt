@@ -444,7 +444,7 @@ class SchoolAdminViewModel : ViewModel() {
         gender: String? = null,
         contact: String? = null,
         address: String? = null,
-        guardianName: String? = null,
+        guardianEmail: String? = null,
         gradeLevel: String? = null
     ) {
         viewModelScope.launch {
@@ -477,7 +477,7 @@ class SchoolAdminViewModel : ViewModel() {
                     gender = gender,
                     contact = contact,
                     address = address,
-                    guardianName = guardianName,
+                    guardianEmail = guardianEmail,
                     gradeLevel = gradeLevel
                 )
                 
@@ -626,7 +626,7 @@ class SchoolAdminViewModel : ViewModel() {
                     "department" to updatedUser.department,
                     "status" to updatedUser.status,
                     "section_id" to updatedUser.sectionId,
-                    "guardian_name" to updatedUser.guardianName,
+                    "guardian_email" to updatedUser.guardianEmail,
                     "student_id" to updatedUser.studentNo,
                     "teacher_id" to updatedUser.teacherId,
                     "parent_id" to updatedUser.parentId,

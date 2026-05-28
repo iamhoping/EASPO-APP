@@ -54,7 +54,7 @@ fun ProfileDashboard(
     var contact by remember(user) { mutableStateOf(user.contact ?: "") }
     var address by remember(user) { mutableStateOf(user.address ?: "") }
     var gender by remember(user) { mutableStateOf(user.gender ?: "") }
-    var guardianName by remember(user) { mutableStateOf(user.guardianName ?: "") }
+    var guardianEmail by remember(user) { mutableStateOf(user.guardianEmail ?: "") }
 
     // Error States
     var emailError by remember { mutableStateOf<String?>(null) }
@@ -162,7 +162,7 @@ fun ProfileDashboard(
                                 contact = contact,
                                 address = address,
                                 gender = gender,
-                                guardianName = if (user.role == UserRole.STUDENT) guardianName else user.guardianName
+                                guardianEmail = if (user.role == UserRole.STUDENT) guardianEmail else user.guardianEmail
                             ))
                             isEditing = false
                         } else {
@@ -233,11 +233,11 @@ fun ProfileDashboard(
 
                     if (user.role == UserRole.STUDENT) {
                         EditableField(
-                            label = "Guardian Name",
-                            value = guardianName,
-                            onValueChange = { guardianName = it },
+                            label = "Guardian Email",
+                            value = guardianEmail,
+                            onValueChange = { guardianEmail = it },
                             isEditing = isEditing,
-                            icon = Icons.Default.FamilyRestroom
+                            icon = Icons.Default.Email
                         )
                     }
                 }
@@ -251,7 +251,7 @@ fun ProfileDashboard(
                         contact = user.contact ?: ""
                         address = user.address ?: ""
                         gender = user.gender ?: ""
-                        guardianName = user.guardianName ?: ""
+                        guardianEmail = user.guardianEmail ?: ""
                         emailError = null
                         contactError = null
                         isEditing = false

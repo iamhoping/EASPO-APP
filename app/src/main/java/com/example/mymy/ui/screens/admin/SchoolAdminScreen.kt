@@ -1496,7 +1496,7 @@ fun RegisterUserDialog(
     var teacherId by remember { mutableStateOf("") }
     var parentId by remember { mutableStateOf("") }
     var childId by remember { mutableStateOf<String?>(null) }
-    var guardianName by remember { mutableStateOf("") }
+    var guardianEmail by remember { mutableStateOf("") }
     
     var roleExpanded by remember { mutableStateOf(false) }
     var genderExpanded by remember { mutableStateOf(false) }
@@ -1608,9 +1608,9 @@ fun RegisterUserDialog(
                     )
                     
                     OutlinedTextField(
-                        value = guardianName,
-                        onValueChange = { guardianName = it },
-                        label = { Text("Guardian Name") },
+                        value = guardianEmail,
+                        onValueChange = { guardianEmail = it },
+                        label = { Text("Guardian Email") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -1661,7 +1661,7 @@ fun RegisterUserDialog(
 
             Button(
                 onClick = { 
-                    onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianName, if (role == UserRole.STUDENT) gradeLevel else null)
+                    onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, if (role == UserRole.STUDENT) gradeLevel else null)
                 }, 
                 colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
                 enabled = isFormValid

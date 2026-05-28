@@ -92,21 +92,21 @@ class ParentViewModel : ViewModel() {
             }
         } else null
 
-        val matchedByGuardianName = if (linkedChildren.isEmpty() && specificChild == null && parentProfile?.name != null) {
+        val matchedByGuardianEmail = if (linkedChildren.isEmpty() && specificChild == null && parentProfile?.email != null) {
             try {
                 SupabaseConfig.client.postgrest["profiles"]
                     .select {
                         filter { 
                             and {
                                 eq("role", "STUDENT")
-                                eq("guardian_name", parentProfile.name)
+                                eq("guardian_email", parentProfile.email)
                             }
                         }
                     }.decodeList<User>()
             } catch (e: Exception) { emptyList() }
         } else emptyList()
 
-        val allChildren = (linkedChildren + listOfNotNull(specificChild) + matchedByGuardianName).distinctBy { it.id }
+        val allChildren = (linkedChildren + listOfNotNull(specificChild) + matchedByGuardianEmail).distinctBy { it.id }
         
         Log.d("ParentVM", "Found ${allChildren.size} children. Current count: ${children.size}")
         

@@ -364,7 +364,7 @@ fun ParentDashboardOverview(
                         modifier = Modifier.weight(1f)
                     )
                     ParentStatCard(
-                        title = "Classes Today",
+                        title = "Total of Classes",
                         value = "${viewModel.childSchedule.size}",
                         subValue = "Full Schedule",
                         icon = Icons.Default.Event,
