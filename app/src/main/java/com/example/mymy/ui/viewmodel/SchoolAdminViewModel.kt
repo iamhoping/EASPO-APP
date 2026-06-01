@@ -499,18 +499,20 @@ class SchoolAdminViewModel : ViewModel() {
             successMessage = null
             try {
                 // Conflict Detection
-                val conflict = allSchedules.find { existing ->
+                // 1. Room Conflict (Same room, same time, same day)
+                val roomConflict = allSchedules.find { existing ->
                     existing.day == schedule.day &&
                     existing.room == schedule.room &&
                     existing.id != schedule.id &&
                     isOverlapping(existing.startTime, existing.endTime, schedule.startTime, schedule.endTime)
                 }
-                if (conflict != null) {
-                    errorMessage = "Room Conflict: ${schedule.room} is occupied on ${schedule.day} at ${conflict.startTime}-${conflict.endTime}"
+                if (roomConflict != null) {
+                    errorMessage = "Room Conflict: ${schedule.room} is occupied on ${schedule.day} at ${roomConflict.startTime}-${roomConflict.endTime} for ${roomConflict.subject}"
                     isLoading = false
                     return@launch
                 }
 
+                // 2. Teacher Conflict (Same teacher, same time, same day)
                 val teacherConflict = allSchedules.find { existing ->
                     existing.day == schedule.day &&
                     existing.teacherId == schedule.teacherId &&
@@ -518,9 +520,24 @@ class SchoolAdminViewModel : ViewModel() {
                     isOverlapping(existing.startTime, existing.endTime, schedule.startTime, schedule.endTime)
                 }
                 if (teacherConflict != null) {
-                    errorMessage = "Teacher Conflict: Assigned teacher has another class at this time (${teacherConflict.startTime}-${teacherConflict.endTime})"
+                    errorMessage = "Teacher Conflict: Assigned teacher has another class (${teacherConflict.subject}) at this time (${teacherConflict.startTime}-${teacherConflict.endTime})"
                     isLoading = false
                     return@launch
+                }
+
+                // 3. Section Conflict (Same section, same time, same day)
+                if (schedule.sectionId != null) {
+                    val sectionConflict = allSchedules.find { existing ->
+                        existing.day == schedule.day &&
+                        existing.sectionId == schedule.sectionId &&
+                        existing.id != schedule.id &&
+                        isOverlapping(existing.startTime, existing.endTime, schedule.startTime, schedule.endTime)
+                    }
+                    if (sectionConflict != null) {
+                        errorMessage = "Section Conflict: This section already has a class (${sectionConflict.subject}) at this time."
+                        isLoading = false
+                        return@launch
+                    }
                 }
 
                 val masterSchedule = schedule
@@ -537,9 +554,6 @@ class SchoolAdminViewModel : ViewModel() {
                 val scheduleId = savedSchedule.id ?: throw Exception("Failed to retrieve saved schedule ID")
 
                 savedSchedule.sectionId?.let { sId ->
-                    SupabaseConfig.client.postgrest["sections"].update(mapOf("status" to "Scheduled")) {
-                        filter { eq("id", sId) }
-                    }
                     SupabaseConfig.client.postgrest["profiles"].update(mapOf("status" to "Assigned")) {
                         filter { eq("section_id", sId) }
                     }

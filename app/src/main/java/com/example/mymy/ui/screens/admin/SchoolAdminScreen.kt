@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.mymy.R
 import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Schedule
 import com.example.mymy.data.model.Section
@@ -43,6 +44,11 @@ import java.util.*
 val ErrorColor = Color(0xFFD32F2F)
 val LightText = Color(0xFF757575)
 
+
+fun isValidEmail(email: String): Boolean {
+    val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$".toRegex()
+    return email.isNotBlank() && emailRegex.matches(email)
+}
 
 @Composable
 fun SubjectList(
@@ -666,7 +672,7 @@ fun DashboardHome(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(id = com.example.mymy.R.drawable.logo),
+                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.logo),
                         contentDescription = "Logo",
                         modifier = Modifier.size(48.dp)
                     )
@@ -1517,9 +1523,9 @@ fun RegisterUserDialog(
                     label = { Text("Email Address") }, 
                     modifier = Modifier.fillMaxWidth(), 
                     shape = RoundedCornerShape(12.dp),
-                    isError = email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches(),
+                    isError = email.isNotBlank() && !isValidEmail(email),
                     supportingText = {
-                        if (email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                        if (email.isNotBlank() && !isValidEmail(email)) {
                             Text("Invalid email format", color = Color.Red)
                         }
                     }
@@ -1650,7 +1656,7 @@ fun RegisterUserDialog(
             }
         },
         confirmButton = {
-            val isEmailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+            val isEmailValid = isValidEmail(email)
             val isFormValid = name.isNotBlank() && 
                             isEmailValid && 
                             password.length >= 6 &&
@@ -1916,14 +1922,14 @@ fun ManageScheduleDialog(
                     )
                     ExposedDropdownMenu(expanded = sectionExpanded, onDismissRequest = { sectionExpanded = false }) {
                         DropdownMenuItem(text = { Text("None") }, onClick = { selectedSectionId = null; sectionExpanded = false })
-                        sections.filter { it.status != "Scheduled" || it.id == schedule.sectionId }.forEach { section ->
+                        sections.forEach { section ->
                             DropdownMenuItem(
                                 text = { Text("${section.name} (Grade ${section.gradeLevel})") }, 
                                 onClick = { 
                                     selectedSectionId = section.id
                                     // Auto-enroll section students
                                     val sectionStudents = students.filter { it.sectionId == section.id }.map { it.id }.toSet()
-                                    selectedStudentIds = selectedStudentIds + sectionStudents
+                                    selectedStudentIds = sectionStudents
                                     sectionExpanded = false 
                                 }
                             )
