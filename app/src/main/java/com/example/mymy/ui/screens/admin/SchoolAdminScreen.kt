@@ -1777,13 +1777,13 @@ fun ManageScheduleDialog(
         title = { Text("Create Class Schedule", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
+                /*OutlinedTextField(
                     value = subject ?: "", 
                     onValueChange = { subject = it }, 
                     label = { Text("Subject Name") }, 
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
-                )
+                )*/
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Day Selector
