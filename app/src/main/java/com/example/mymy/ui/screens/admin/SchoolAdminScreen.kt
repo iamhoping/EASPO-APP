@@ -94,7 +94,7 @@ fun SubjectList(
                     }
                 }
             }
-            
+
             if (subjects.isEmpty()) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
