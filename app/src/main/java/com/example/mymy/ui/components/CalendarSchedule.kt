@@ -298,7 +298,20 @@ fun ScheduleGridItem(
 
     val (startTime, duration) = parseTime(schedule)
 
-    
+    var showConflictDialog by remember { mutableStateOf(false) }
+
+    if (showConflictDialog) {
+        ElegantDialog(
+            onDismiss = { showConflictDialog = false },
+            title = "Schedule Detail",
+            message = "${schedule.subject}\nRoom: ${schedule.room}\nTime: ${schedule.startTime} - ${schedule.endTime}",
+            type = DialogType.INFO,
+            icon = Icons.Default.EventNote,
+            confirmButtonText = "OK",
+            dismissButtonText = null
+        )
+    }
+
     // Grid starts at 7 AM (to match the TimeRow loop)
     val topOffset = 80.dp * (startTime - 7f)
     val height = 80.dp * duration
@@ -319,6 +332,7 @@ fun ScheduleGridItem(
             .padding(2.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (isHighlighted) DeepGreen else Color(0xFFE8F3F1))
+            .clickable { showConflictDialog = true }
             .padding(8.dp)
     ) {
         Column {

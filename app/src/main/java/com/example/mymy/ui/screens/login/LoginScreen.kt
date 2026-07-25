@@ -23,6 +23,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.example.mymy.R
 import com.example.mymy.data.model.UserRole
+import com.example.mymy.ui.components.AuthErrorDialog
+import com.example.mymy.ui.components.ElegantDialog
 import com.example.mymy.ui.theme.*
 import com.example.mymy.ui.viewmodel.LoginViewModel
 
@@ -33,6 +35,14 @@ fun LoginScreen(
     onLogin: (UserRole) -> Unit
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+
+    // Use AuthErrorDialog instead of simple text
+    viewModel.errorMessage?.let { error ->
+        AuthErrorDialog(
+            message = error,
+            onDismiss = { viewModel.errorMessage = null }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -152,15 +162,6 @@ fun LoginScreen(
                 TextButton(onClick = onForgotPasswordClick) {
                     Text("Forgot password?", color = DeepGreen, fontWeight = FontWeight.Bold)
                 }
-            }
-
-            viewModel.errorMessage?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
             }
 
             Spacer(modifier = Modifier.weight(0.2f))

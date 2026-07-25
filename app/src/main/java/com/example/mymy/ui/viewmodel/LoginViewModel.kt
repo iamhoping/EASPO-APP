@@ -63,7 +63,7 @@ class LoginViewModel : ViewModel() {
                 }
 
             } catch (e: Exception) {
-                errorMessage = e.message ?: "Login failed"
+                errorMessage = "Incorrect email or password. Please try again."
             } finally {
                 isLoading = false
             }

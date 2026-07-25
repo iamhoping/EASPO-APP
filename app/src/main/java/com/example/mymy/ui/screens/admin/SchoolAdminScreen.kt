@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,6 +41,7 @@ import com.example.mymy.ui.theme.LightGreen
 import com.example.mymy.ui.theme.SageGreen
 import com.example.mymy.ui.viewmodel.SchoolAdminViewModel
 import com.example.mymy.data.model.Subject
+import com.example.mymy.ui.components.*
 import java.util.*
 
 val ErrorColor = Color(0xFFD32F2F)
@@ -230,6 +233,42 @@ fun SchoolAdminScreen(
     var sectionToDelete by remember { mutableStateOf<Section?>(null) }
     var viewingSection by remember { mutableStateOf<Section?>(null) }
     var studentToRemoveFromSection by remember { mutableStateOf<User?>(null) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
+
+    // Replace banners with ElegantDialogs for high-impact feedback
+    viewModel.errorMessage?.let { error ->
+        ElegantDialog(
+            onDismiss = { viewModel.errorMessage = null },
+            title = "Attention",
+            message = error,
+            type = DialogType.ERROR,
+            confirmButtonText = "Understood",
+            dismissButtonText = null
+        )
+    }
+
+    viewModel.successMessage?.let { success ->
+        SuccessDialog(
+            title = "Success",
+            message = success,
+            onConfirm = { viewModel.successMessage = null }
+        )
+    }
+
+    if (showLogoutConfirmation) {
+        ElegantDialog(
+            onDismiss = { showLogoutConfirmation = false },
+            title = "Logout Confirmation",
+            message = "Are you sure you want to log out of your admin session?",
+            type = DialogType.WARNING,
+            icon = Icons.AutoMirrored.Filled.ExitToApp,
+            confirmButtonText = "Logout",
+            onConfirm = {
+                showLogoutConfirmation = false
+                onLogout()
+            }
+        )
+    }
 
     Scaffold(
         bottomBar = {
@@ -350,42 +389,6 @@ fun SchoolAdminScreen(
         containerColor = BackgroundColor
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // Error display
-            viewModel.errorMessage?.let { error ->
-                Card(
-                    modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Error, null, tint = Color.Red)
-                        Spacer(Modifier.width(8.dp))
-                        Text(error, color = Color.Red, fontSize = 14.sp)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { viewModel.errorMessage = null }) {
-                            Icon(Icons.Default.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-
-            // Success message display
-            viewModel.successMessage?.let { success ->
-                Card(
-                    modifier = Modifier.padding(8.dp).fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, null, tint = DeepGreen)
-                        Spacer(Modifier.width(8.dp))
-                        Text(success, color = DeepGreen, fontSize = 14.sp)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { viewModel.successMessage = null }) {
-                            Icon(Icons.Default.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-            }
-
             if (viewModel.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = DeepGreen)
@@ -394,7 +397,7 @@ fun SchoolAdminScreen(
                 when (selectedTab) {
                     0 -> DashboardHome(
                         viewModel = viewModel,
-                        onLogout = onLogout,
+                        onLogout = { showLogoutConfirmation = true },
                         onRegisterUser = {
                             selectedTab = 1
                             showUserDialog = true
@@ -458,7 +461,7 @@ fun SchoolAdminScreen(
                         ProfileDashboard(
                             user = viewModel.userProfile,
                             onUpdate = { viewModel.updateProfile(it) },
-                            onLogout = onLogout
+                            onLogout = { showLogoutConfirmation = true }
                         )
                     }
                 }
@@ -566,82 +569,41 @@ fun SchoolAdminScreen(
         }
 
         if (sectionToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { sectionToDelete = null },
-                icon = { Icon(Icons.Default.DeleteForever, null, tint = ErrorColor) },
-                title = { Text("Delete Section") },
-                text = { Text("Are you sure you want to delete section '${sectionToDelete?.name}'? This will unassign all students and delete related schedules.") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            sectionToDelete?.id?.let { viewModel.deleteSection(it) }
-                            sectionToDelete = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
-                    ) {
-                        Text("Delete")
-                    }
+            DeleteConfirmationDialog(
+                itemName = "Section: ${sectionToDelete?.name}",
+                onConfirm = {
+                    sectionToDelete?.id?.let { viewModel.deleteSection(it) }
+                    sectionToDelete = null
                 },
-                dismissButton = {
-                    TextButton(onClick = { sectionToDelete = null }) { Text("Cancel") }
-                }
+                onDismiss = { sectionToDelete = null }
             )
         }
 
         if (studentToRemoveFromSection != null) {
-            AlertDialog(
-                onDismissRequest = { studentToRemoveFromSection = null },
-                title = { Text("Remove Student") },
-                text = { Text("Are you sure you want to remove ${studentToRemoveFromSection!!.name} from ${viewingSection?.name}?") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            studentToRemoveFromSection?.let { student ->
-                                viewModel.removeStudentFromSection(student.id)
-                            }
-                            studentToRemoveFromSection = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
-                    ) { Text("Remove", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { studentToRemoveFromSection = null }) { Text("Cancel") }
+            ElegantDialog(
+                onDismiss = { studentToRemoveFromSection = null },
+                title = "Remove Student",
+                message = "Are you sure you want to remove ${studentToRemoveFromSection!!.name} from ${viewingSection?.name}?",
+                type = DialogType.WARNING,
+                icon = Icons.Default.PersonRemove,
+                confirmButtonText = "Remove",
+                onConfirm = {
+                    studentToRemoveFromSection?.let { student ->
+                        viewModel.removeStudentFromSection(student.id)
+                    }
+                    studentToRemoveFromSection = null
                 }
             )
         }
 
         if (userToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { userToDelete = null },
-                icon = { Icon(Icons.Default.DeleteForever, null, tint = ErrorColor) },
-                title = { Text("Confirm Deletion") },
-                text = {
-                    Column {
-                        Text("Are you sure you want to delete ${userToDelete?.name}?")
-                        Text(
-                            "This action will remove their profile and access to the system. This cannot be undone.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LightText,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
+            DeleteConfirmationDialog(
+                itemName = "User: ${userToDelete?.name}",
+                onConfirm = {
+                    userToDelete?.id?.let { viewModel.deleteUser(it) }
+                    userToDelete = null
                 },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            userToDelete?.id?.let { viewModel.deleteUser(it) }
-                            userToDelete = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)
-                    ) {
-                        Text("Delete User")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { userToDelete = null }) {
-                        Text("Cancel")
-                    }
-                }
+                onDismiss = { userToDelete = null }
             )
         }
     }
@@ -752,7 +714,7 @@ fun DashboardHome(
                 QuickActionButtonExtended(
                     label = "Attendance Log",
                     subtitle = "Review daily attendance records",
-                    icon = Icons.Default.Assignment,
+                    icon = Icons.AutoMirrored.Filled.Assignment,
                     onClick = onViewAttendance
                 )
             }
@@ -1154,7 +1116,7 @@ fun SectionDetailView(
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize()) {
                 IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                 }
                 Column(modifier = Modifier.align(Alignment.CenterStart).padding(top = 40.dp)) {
                     Text("Grade ${section.gradeLevel}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
