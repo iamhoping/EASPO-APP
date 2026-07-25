@@ -10,7 +10,9 @@ import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.exception.AuthRestException
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.exceptions.HttpRequestException
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -67,12 +69,27 @@ class SignUpViewModel : ViewModel() {
                 isSuccess = true
 
             } catch (e: Exception) {
-                errorMessage = when {
-                    e.message?.contains("over_email_send_rate_limit") == true -> 
-                        "Too many attempts. Please try again later or use a different email."
-                    e.message?.contains("network") == true -> 
-                        "Network error. Please check your internet connection."
-                    else -> e.message ?: "Sign up failed"
+                Log.e("SignUp", "Error: ${e.message}", e)
+                errorMessage = when (e) {
+                    is HttpRequestException -> "Network error. Please check your internet connection."
+                    is AuthRestException -> {
+                        when (e.error) {
+                            "user_already_exists" -> "This email is already registered."
+                            "over_email_send_rate_limit" -> "Too many requests. Please try again in a few minutes."
+                            "weak_password" -> "Password is too weak."
+                            else -> "Registration failed: ${e.description ?: "Unknown error"}"
+                        }
+                    }
+                    else -> {
+                        if (e.message?.contains("User already registered", ignoreCase = true) == true) {
+                            "This email is already registered. Please login instead."
+                        } else if (e.message?.contains("network", ignoreCase = true) == true || 
+                                   e.message?.contains("Unable to resolve host", ignoreCase = true) == true) {
+                            "Network error. Please check your internet connection."
+                        } else {
+                            "Registration failed. Please try again later."
+                        }
+                    }
                 }
             } finally {
                 isLoading = false

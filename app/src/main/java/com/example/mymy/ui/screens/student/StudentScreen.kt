@@ -464,6 +464,9 @@ fun GradesList(viewModel: StudentViewModel) {
 
 @Composable
 fun AttendanceList(viewModel: StudentViewModel) {
+    val attendanceBySchedule = viewModel.attendanceBySchedule
+    val schedules = viewModel.scheduleList
+
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
         // Curved Header
         Surface(
@@ -481,9 +484,13 @@ fun AttendanceList(viewModel: StudentViewModel) {
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(viewModel.attendanceList) { att ->
+            item {
+                Text("ATTENDANCE HISTORY", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+            }
+
+            items(viewModel.attendanceList.sortedByDescending { it.date }) { att ->
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -493,9 +500,28 @@ fun AttendanceList(viewModel: StudentViewModel) {
                     Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             Text(att.date, fontWeight = FontWeight.SemiBold, color = DeepGreen)
-                            Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
+                                if (att.status == "Present" && att.timeIn != null) {
+                                    Text(" • ", color = LightText)
+                                    // Extract time if it's a full timestamp, otherwise show as is
+                                    val timeOnly = if (att.timeIn.contains(" ")) att.timeIn.split(" ")[1] else att.timeIn
+                                    Text(timeOnly, style = MaterialTheme.typography.bodySmall, color = LightText)
+                                }
+                            }
                         }
-                        Text(att.status, color = if (att.status == "Present") DeepGreen else ErrorColor, fontWeight = FontWeight.Bold)
+                        Surface(
+                            color = if (att.status == "Present") SageGreen.copy(alpha = 0.1f) else ErrorColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                att.status,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = if (att.status == "Present") DeepGreen else ErrorColor,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 }
             }

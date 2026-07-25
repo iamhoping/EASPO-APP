@@ -32,6 +32,9 @@ class StudentViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
     var userProfile by mutableStateOf<User?>(null)
 
+    val attendanceBySchedule: Map<Long, List<Attendance>>
+        get() = attendanceList.groupBy { it.scheduleId ?: -1L }
+
     fun fetchData() {
         val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id ?: return
         android.util.Log.d("StudentVM", "fetchData started for userId: $userId")
@@ -48,12 +51,8 @@ class StudentViewModel : ViewModel() {
                 android.util.Log.d("StudentVM", "Fetched profile: $userProfile")
 
                 // Fetch Attendance
-                attendanceList = try {
-                    SupabaseConfig.client.postgrest["attendance"]
-                        .select {
-                            filter { eq("student_id", userId) }
-                        }.decodeList<Attendance>()
-                } catch (e: Exception) { emptyList() }
+                fetchAttendance(userId)
+                subscribeToAttendance(userId)
 
                 // Fetch Grades
                 fetchGrades(userId)
@@ -93,6 +92,35 @@ class StudentViewModel : ViewModel() {
             } finally {
                 isLoading = false
             }
+        }
+    }
+
+    private suspend fun fetchAttendance(userId: String) {
+        try {
+            attendanceList = SupabaseConfig.client.postgrest["attendance"]
+                .select {
+                    filter { eq("student_id", userId) }
+                }.decodeList<Attendance>()
+            android.util.Log.d("StudentVM", "Fetched ${attendanceList.size} attendance records")
+        } catch (e: Exception) {
+            android.util.Log.e("StudentVM", "Error fetching attendance", e)
+        }
+    }
+
+    private fun subscribeToAttendance(userId: String) {
+        val channel = SupabaseConfig.client.channel("attendance_changes")
+        val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "attendance"
+            filter(FilterOperation("student_id", FilterOperator.EQ, userId))
+        }
+
+        flow.onEach { action ->
+            android.util.Log.d("StudentVM", "Attendance change detected: $action")
+            fetchAttendance(userId)
+        }.launchIn(viewModelScope)
+
+        viewModelScope.launch {
+            channel.subscribe()
         }
     }
 

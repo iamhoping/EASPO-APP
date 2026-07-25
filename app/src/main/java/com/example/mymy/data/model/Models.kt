@@ -47,15 +47,18 @@ data class RegisterUserRequest(
 @Serializable
 data class Attendance(
     val id: Long? = null,
-    @SerialName("student_id") val studentId: String? = null,
-    @SerialName("teacher_id") val teacherId: String? = null,
-    val date: String,
+    @SerialName("student_id") val studentId: String,
+    @SerialName("section_id") val sectionId: Long? = null,
+    @SerialName("schedule_id") val scheduleId: Long? = null,
+    @SerialName("attendance_date") val date: String,
     @SerialName("time_in") val timeIn: String? = null,
     @SerialName("time_out") val timeOut: String? = null,
     val status: String,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
     val subject: String? = null,
     @SerialName("subject_id") val subjectId: Int? = null,
-    @SerialName("schedule_id") val scheduleId: Long? = null
+    @SerialName("teacher_id") val teacherId: String? = null
 )
 
 @Serializable

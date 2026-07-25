@@ -24,6 +24,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.TimeZone
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mymy.data.model.User
 import com.example.mymy.ui.components.CalendarScheduleView
@@ -691,45 +692,135 @@ fun StudentGradeRow(
 
 @Composable
 fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
-    var selectedSubject by remember { mutableStateOf<String?>(null) }
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    var selectedSection by remember { mutableStateOf<com.example.mymy.data.model.Section?>(null) }
     
-    val scanLauncher = rememberLauncherForActivityResult(
-        contract = ScanContract(),
-        onResult = { result ->
-            result.contents?.let { studentNo ->
-                val student = viewModel.students.find { it.studentNo == studentNo }
-                if (student != null) {
-                    viewModel.markAttendance(student.id, "Present", selectedSubject ?: "General")
-                } else {
-                    viewModel.errorMessage = "Student with ID $studentNo not found"
-                }
-            }
-        }
-    )
-
-    val distinctSubjects = remember(viewModel.scheduleList) {
-        viewModel.scheduleList.mapNotNull { it.subject }.distinct()
+    if (selectedSection == null) {
+        SectionSelectionForAttendance(
+            sections = viewModel.sections,
+            onSectionClick = { selectedSection = it }
+        )
+    } else {
+        SectionAttendanceDetailScreen(
+            section = selectedSection!!,
+            viewModel = viewModel,
+            onBack = { selectedSection = null }
+        )
     }
+}
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
-        // Curved Header
+@Composable
+fun SectionSelectionForAttendance(
+    sections: List<com.example.mymy.data.model.Section>,
+    onSectionClick: (com.example.mymy.data.model.Section) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(140.dp),
             color = DeepGreen,
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                Row(
+                Column {
+                    Text("Attendance", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Select a section to view attendance", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        LazyColumn(
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(sections) { section ->
+                Surface(
+                    onClick = { onSectionClick(section) },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.White,
+                    shadowElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+                ) {
+                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(modifier = Modifier.size(50.dp), color = LightGreen, shape = RoundedCornerShape(12.dp)) {
+                            Icon(Icons.Default.Groups, null, tint = DeepGreen, modifier = Modifier.padding(12.dp))
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("${section.gradeLevel} - ${section.name}", fontWeight = FontWeight.Bold, color = DeepGreen)
+                            Text("S.Y. 2025-2026", style = MaterialTheme.typography.bodySmall, color = LightText)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SectionAttendanceDetailScreen(
+    section: com.example.mymy.data.model.Section,
+    viewModel: TeacherViewModel,
+    onBack: () -> Unit
+) {
+    var selectedSchedule by remember { mutableStateOf<com.example.mymy.data.model.Schedule?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = System.currentTimeMillis()
+    )
+
+    val schedulesForSection = remember(viewModel.scheduleList, section.id) {
+        viewModel.scheduleList.filter { it.sectionId == section.id }
+    }
+    
+    val sectionStudents = remember(viewModel.students, section.id) {
+        viewModel.students.filter { it.sectionId == section.id }
+    }
+
+    LaunchedEffect(viewModel.selectedDate, section.id) {
+        section.id?.let { viewModel.fetchAttendanceForSection(it, viewModel.selectedDate) }
+    }
+
+    val scanLauncher = rememberLauncherForActivityResult(
+        contract = ScanContract(),
+        onResult = { result ->
+            result.contents?.let { studentNo ->
+                val student = viewModel.students.find { it.studentNo == studentNo }
+                if (student != null && selectedSchedule != null) {
+                    viewModel.markAttendance(student.id, "Present", selectedSchedule!!)
+                } else if (student == null) {
+                    viewModel.errorMessage = "Student with ID $studentNo not found"
+                } else {
+                    viewModel.errorMessage = "Please select a schedule first"
+                }
+            }
+        }
+    )
+
+    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(16.dp).fillMaxSize()) {
+                Row(
+                    modifier = Modifier.align(Alignment.CenterStart),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("Mark Attendance", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Date: $today", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                     }
-                    
+                    Column {
+                        Text(section.name, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Attendance History", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                
+                Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(
                         onClick = {
                             val options = ScanOptions()
@@ -744,106 +835,141 @@ fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
                             contentColor = Color.White
                         )
                     ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Scan QR")
+                        Icon(Icons.Default.QrCodeScanner, null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Scan", style = MaterialTheme.typography.labelSmall)
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Surface(
+                        onClick = { showDatePicker = true },
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CalendarToday, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(viewModel.selectedDate, color = Color.White, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
         }
 
+        if (showDatePicker) {
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                            sdf.timeZone = TimeZone.getTimeZone("UTC")
+                            viewModel.selectedDate = sdf.format(Date(millis))
+                        }
+                        showDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+
         Column(modifier = Modifier.padding(24.dp)) {
-            Text("SELECT CLASS", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+            Text("SELECT SCHEDULE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (distinctSubjects.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.EventBusy, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("No classes scheduled", color = LightText, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
+            if (schedulesForSection.isEmpty()) {
+                Text("No schedules found for this section", color = LightText)
             } else {
-                if (selectedSubject == null) {
-                    selectedSubject = distinctSubjects.first()
-                }
-
-                val selectedIndex = distinctSubjects.indexOf(selectedSubject).coerceAtLeast(0)
+                if (selectedSchedule == null) selectedSchedule = schedulesForSection.first()
 
                 SecondaryScrollableTabRow(
-                    selectedTabIndex = selectedIndex,
+                    selectedTabIndex = schedulesForSection.indexOf(selectedSchedule).coerceAtLeast(0),
                     containerColor = Color.Transparent,
                     contentColor = DeepGreen,
                     edgePadding = 0.dp,
                     divider = {}
                 ) {
-                    distinctSubjects.forEach { subject ->
+                    schedulesForSection.forEach { schedule ->
                         Tab(
-                            selected = selectedSubject == subject,
-                            onClick = { selectedSubject = subject },
-                            text = { Text(subject) }
+                            selected = selectedSchedule == schedule,
+                            onClick = { selectedSchedule = schedule },
+                            text = { Text(schedule.subject ?: "No Subject") }
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-                val enrolledStudents = remember(viewModel.students, selectedSubject, viewModel.scheduleList) {
-                    try {
-                        val scheduleForSubject = viewModel.scheduleList.filter { it.subject == selectedSubject }
-                        val targetSectionIds = scheduleForSubject.mapNotNull { it.sectionId }.toSet()
-                        val targetStudentIds = scheduleForSubject.mapNotNull { it.studentId }.toSet()
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("STUDENT STATUS", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+                
+                // Summary
+                val presentCount = viewModel.attendanceRecords.count { it.status == "Present" && it.scheduleId == selectedSchedule?.id }
+                Text("$presentCount/${sectionStudents.size} Present", style = MaterialTheme.typography.labelMedium, color = SageGreen)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
 
-                        viewModel.students.filter { student ->
-                            targetStudentIds.contains(student.id) || 
-                            targetStudentIds.contains(student.studentNo) ||
-                            (student.sectionId != null && targetSectionIds.contains(student.sectionId))
-                        }.sortedBy { it.name }
-                    } catch (e: Exception) {
-                        emptyList()
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(sectionStudents) { student ->
+                    val attendance = viewModel.attendanceRecords.find { 
+                        it.studentId == student.id && it.scheduleId == selectedSchedule?.id 
                     }
-                }
+                    val status = attendance?.status ?: "Absent" // Default to Absent if no record
+                    val timeIn = attendance?.timeIn
 
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(enrolledStudents) { student ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color.White,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
-                        ) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
-                                    Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.bodySmall, color = LightText)
-                                }
-                                
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    IconButton(
-                                        onClick = { viewModel.markAttendance(student.id, "Present", selectedSubject ?: "General") },
-                                        colors = IconButtonDefaults.iconButtonColors(containerColor = LightGreen)
-                                    ) {
-                                        Icon(Icons.Default.Check, "Present", tint = DeepGreen)
-                                    }
-                                    IconButton(
-                                        onClick = { viewModel.markAttendance(student.id, "Absent", selectedSubject ?: "General") },
-                                        colors = IconButtonDefaults.iconButtonColors(containerColor = Color(0xFFFFEBEE))
-                                    ) {
-                                        Icon(Icons.Default.Close, "Absent", tint = Color.Red)
-                                    }
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(modifier = Modifier.size(40.dp), color = LightGreen.copy(alpha = 0.3f), shape = RoundedCornerShape(10.dp)) {
+                                Icon(Icons.Default.Person, null, tint = DeepGreen, modifier = Modifier.padding(8.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(12.dp), tint = LightText)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(timeIn ?: "--:--", style = MaterialTheme.typography.bodySmall, color = LightText)
                                 }
                             }
-                        }
-                    }
-                    
-                    if (enrolledStudents.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(Icons.Default.PeopleOutline, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("No students enrolled in this class", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                            
+                            StatusBadge(status)
+
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            // Manual Update Options
+                            var showActions by remember { mutableStateOf(false) }
+                            IconButton(onClick = { showActions = true }) {
+                                Icon(Icons.Default.MoreVert, null, tint = LightText)
+                            }
+
+                            if (showActions) {
+                                androidx.compose.ui.window.Dialog(onDismissRequest = { showActions = false }) {
+                                    Surface(shape = RoundedCornerShape(16.dp), color = Color.White) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Text("Mark ${student.name} as:", fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            TextButton(onClick = { 
+                                                selectedSchedule?.let { viewModel.markAttendance(student.id, "Present", it) }
+                                                showActions = false 
+                                            }) { Text("Present", color = SageGreen) }
+                                            TextButton(onClick = { 
+                                                selectedSchedule?.let { viewModel.markAttendance(student.id, "Absent", it) }
+                                                showActions = false 
+                                            }) { Text("Absent", color = Color.Red) }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -851,6 +977,28 @@ fun TeacherAttendanceScreen(viewModel: TeacherViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val color = when(status) {
+        "Present" -> SageGreen
+        "Late" -> Color(0xFFFFB74D)
+        else -> Color(0xFFEF5350)
+    }
+    Surface(
+        color = color.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.5f))
+    ) {
+        Text(
+            text = status,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

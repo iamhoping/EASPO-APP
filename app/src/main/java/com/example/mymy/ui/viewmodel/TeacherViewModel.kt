@@ -28,8 +28,76 @@ class TeacherViewModel : ViewModel() {
     var enrollments by mutableStateOf<List<Enrollment>>(emptyList())
     var userProfile by mutableStateOf<User?>(null)
     var studentGrades by mutableStateOf<Map<String, List<Grade>>>(emptyMap()) // studentId -> list of grades
+    var attendanceRecords by mutableStateOf<List<Attendance>>(emptyList())
+    var selectedDate by mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
     
     var isLoading by mutableStateOf(false)
+
+    fun fetchAttendanceForSection(sectionId: Long, date: String) {
+        viewModelScope.launch {
+            isLoading = true
+            try {
+                // 1. Fetch existing records
+                val existingRecords = SupabaseConfig.client.postgrest["attendance"]
+                    .select {
+                        filter {
+                            eq("section_id", sectionId)
+                            eq("attendance_date", date)
+                        }
+                    }.decodeList<Attendance>()
+
+                // 2. Identify missing records (Initialization Rule 1 & 2)
+                val sectionStudents = students.filter { it.sectionId == sectionId }
+                val sectionSchedules = scheduleList.filter { it.sectionId == sectionId }
+                
+                val initializedRecords = mutableListOf<Attendance>()
+                
+                for (student in sectionStudents) {
+                    for (schedule in sectionSchedules) {
+                        val exists = existingRecords.any { 
+                            it.studentId == student.id && it.scheduleId == schedule.id 
+                        }
+                        
+                        if (!exists) {
+                            initializedRecords.add(
+                                Attendance(
+                                    studentId = student.id,
+                                    sectionId = sectionId,
+                                    scheduleId = schedule.id,
+                                    date = date,
+                                    status = "Absent", // Rule 1: Default to Absent
+                                    subject = schedule.subject,
+                                    subjectId = schedule.subjectId,
+                                    teacherId = schedule.teacherId
+                                )
+                            )
+                        }
+                    }
+                }
+
+                // 3. Bulk insert missing records if any
+                if (initializedRecords.isNotEmpty()) {
+                    SupabaseConfig.client.postgrest["attendance"].insert(initializedRecords)
+                    // Re-fetch to get IDs
+                    attendanceRecords = SupabaseConfig.client.postgrest["attendance"]
+                        .select {
+                            filter {
+                                eq("section_id", sectionId)
+                                eq("attendance_date", date)
+                            }
+                        }.decodeList<Attendance>()
+                } else {
+                    attendanceRecords = existingRecords
+                }
+
+            } catch (e: Exception) {
+                Log.e("TeacherVM", "Error fetching/initializing attendance", e)
+                attendanceRecords = emptyList()
+            } finally {
+                isLoading = false
+            }
+        }
+    }
     var errorMessage by mutableStateOf<String?>(null)
     var successMessage by mutableStateOf<String?>(null)
 
@@ -160,24 +228,53 @@ class TeacherViewModel : ViewModel() {
         }
     }
 
-    fun markAttendance(studentId: String, status: String, subject: String) {
+    fun markAttendance(studentId: String, status: String, schedule: Schedule) {
         val teacherUuid = userProfile?.id ?: return
+        val sectionId = schedule.sectionId ?: return
+        val scheduleId = schedule.id ?: return
+        
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             successMessage = null
             try {
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val currentDate = sdf.format(Date())
-                val attendance = Attendance(
-                    studentId = studentId,
-                    teacherId = teacherUuid,
-                    date = currentDate,
-                    status = status,
-                    subject = subject
-                )
-                SupabaseConfig.client.postgrest["attendance"].insert(attendance)
-                successMessage = "Attendance marked: $status"
+                val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+                // Check for existing record for the SELECTED date (not necessarily today)
+                val existing = SupabaseConfig.client.postgrest["attendance"]
+                    .select {
+                        filter {
+                            eq("student_id", studentId)
+                            eq("schedule_id", scheduleId)
+                            eq("attendance_date", selectedDate)
+                        }
+                    }.decodeSingleOrNull<Attendance>()
+
+                if (existing != null) {
+                    val updates = mapOf(
+                        "status" to status,
+                        "time_in" to if (status == "Present") now else null,
+                        "updated_at" to now
+                    )
+                    SupabaseConfig.client.postgrest["attendance"].update(updates) {
+                        filter { eq("id", existing.id!!) }
+                    }
+                } else {
+                    val attendance = Attendance(
+                        studentId = studentId,
+                        sectionId = sectionId,
+                        scheduleId = scheduleId,
+                        date = selectedDate,
+                        status = status,
+                        timeIn = if (status == "Present") now else null,
+                        subject = schedule.subject,
+                        subjectId = schedule.subjectId,
+                        teacherId = schedule.teacherId
+                    )
+                    SupabaseConfig.client.postgrest["attendance"].insert(attendance)
+                }
+                successMessage = "Attendance updated: $status"
+                fetchAttendanceForSection(sectionId, selectedDate)
             } catch (e: Exception) {
                 Log.e("TeacherVM", "Error marking attendance", e)
                 errorMessage = e.message ?: "Failed to mark attendance"
