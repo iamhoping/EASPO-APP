@@ -23,6 +23,7 @@ import com.example.mymy.ui.screens.login.LoginScreen
 import com.example.mymy.ui.screens.login.ResetPasswordScreen
 import com.example.mymy.ui.screens.login.SignUpScreen
 import com.example.mymy.ui.screens.parent.ParentScreen
+import com.example.mymy.ui.screens.scanner.ScannerScreen
 import com.example.mymy.ui.screens.student.StudentScreen
 import com.example.mymy.ui.screens.teacher.TeacherScreen
 import com.example.mymy.ui.theme.MymyTheme
@@ -93,6 +94,7 @@ fun AppNavigation() {
                         UserRole.SCHOOL_ADMIN -> navController.navigate(Screen.SchoolAdminDashboard.route)
                         UserRole.WEB_ADMIN -> navController.navigate(Screen.WebAdminDashboard.route)
                         UserRole.PARENT -> navController.navigate(Screen.ParentDashboard.route)
+                        UserRole.SCANNER -> navController.navigate(Screen.ScannerDashboard.route)
                     }
                 }
             )
@@ -118,5 +120,6 @@ fun AppNavigation() {
         composable(Screen.SchoolAdminDashboard.route) { SchoolAdminScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }
         composable(Screen.WebAdminDashboard.route) { WebAdminScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }
         composable(Screen.ParentDashboard.route) { ParentScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }
+        composable(Screen.ScannerDashboard.route) { ScannerScreen(onLogout = { navController.navigate(Screen.Login.route) { popUpTo(0) } }) }
     }
 }
