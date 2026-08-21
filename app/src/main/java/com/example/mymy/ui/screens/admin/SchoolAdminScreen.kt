@@ -825,7 +825,7 @@ fun UserList(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val roles = listOf(null, UserRole.STUDENT, UserRole.TEACHER, UserRole.PARENT)
+                val roles = listOf(null, UserRole.STUDENT, UserRole.TEACHER, UserRole.PARENT, UserRole.SCANNER)
                 roles.forEach { role ->
                     FilterChip(
                         selected = selectedRole == role,
@@ -836,6 +836,7 @@ fun UserList(
                                     UserRole.STUDENT -> "Students"
                                     UserRole.TEACHER -> "Teachers"
                                     UserRole.PARENT -> "Parents"
+                                    UserRole.SCANNER -> "Scanners"
                                     else -> "All"
                                 },
                                 maxLines = 1

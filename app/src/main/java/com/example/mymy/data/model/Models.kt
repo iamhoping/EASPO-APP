@@ -4,7 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 enum class UserRole {
-    STUDENT, TEACHER, SCHOOL_ADMIN, WEB_ADMIN, PARENT
+    STUDENT, TEACHER, SCHOOL_ADMIN, WEB_ADMIN, PARENT, SCANNER
 }
 
 @Serializable
