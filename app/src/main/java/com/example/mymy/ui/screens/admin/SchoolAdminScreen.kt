@@ -509,19 +509,17 @@ fun SchoolAdminScreen(
             ManageSectionDialog(
                 section = editingSection!!,
                 allStudents = users.filter { it.role == UserRole.STUDENT },
-                teachers = viewModel.allTeachers,
                 onDismiss = {
                     showSectionDialog = false
                     editingSection = null
                 },
-                onSave = { name, grade, adviserId, studentIds ->
+                onSave = { name, grade, studentIds ->
                     if (editingSection?.id == null) {
-                        viewModel.createSection(name, grade, adviserId, studentIds)
+                        viewModel.createSection(name, grade, studentIds)
                     } else {
                         val updatedSection = editingSection!!.copy(
                             name = name,
-                            gradeLevel = grade,
-                            adviserId = adviserId
+                            gradeLevel = grade
                         )
                         viewModel.updateSection(updatedSection, studentIds)
                         if (viewingSection?.id == updatedSection.id) {
@@ -1283,14 +1281,12 @@ fun AddStudentToSectionDialog(
 fun ManageSectionDialog(
     section: Section,
     allStudents: List<User>,
-    teachers: List<User> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (String, String, String?, List<String>) -> Unit,
+    onSave: (String, String, List<String>) -> Unit,
     onDelete: (Long) -> Unit
 ) {
     var name by remember { mutableStateOf(section.name) }
     var gradeLevel by remember { mutableStateOf(section.gradeLevel) }
-    var adviserId by remember { mutableStateOf(section.adviserId) }
 
     val filteredStudents = remember(gradeLevel, allStudents) {
         allStudents.filter {
@@ -1311,7 +1307,6 @@ fun ManageSectionDialog(
     var selectedStudentIds by remember { mutableStateOf(initialSelectedIds) }
 
     var gradeExpanded by remember { mutableStateOf(false) }
-    var teacherExpanded by remember { mutableStateOf(false) }
     val gradeLevels = (7..12).map { it.toString() }
 
     AlertDialog(
@@ -1353,23 +1348,6 @@ fun ManageSectionDialog(
                                     }.toSet()
                                 }
                             )
-                        }
-                    }
-                }
-
-                ExposedDropdownMenuBox(expanded = teacherExpanded, onExpandedChange = { teacherExpanded = it }) {
-                    OutlinedTextField(
-                        value = teachers.find { it.id == adviserId }?.name ?: "Select Adviser",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Adviser (Teacher)") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = teacherExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(expanded = teacherExpanded, onDismissRequest = { teacherExpanded = false }) {
-                        teachers.forEach { teacher ->
-                            DropdownMenuItem(text = { Text(teacher.name ?: "Unknown") }, onClick = { adviserId = teacher.id; teacherExpanded = false })
                         }
                     }
                 }
@@ -1433,7 +1411,7 @@ fun ManageSectionDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(name, gradeLevel, adviserId, selectedStudentIds.toList()) },
+                onClick = { onSave(name, gradeLevel, selectedStudentIds.toList()) },
                 colors = ButtonDefaults.buttonColors(containerColor = DeepGreen),
                 enabled = name.isNotBlank()
             ) {

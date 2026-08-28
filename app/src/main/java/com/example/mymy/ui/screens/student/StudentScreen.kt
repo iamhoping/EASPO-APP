@@ -127,7 +127,7 @@ fun StudentScreen(
                 }
 
                 when (selectedTab) {
-                    0 -> DashboardContent(viewModel)
+                    0 -> DashboardContent(viewModel, onTabChange = { selectedTab = it })
                     1 -> ScheduleList(viewModel)
                     2 -> GradesList(viewModel)
                     3 -> AttendanceList(viewModel)
@@ -139,7 +139,7 @@ fun StudentScreen(
 }
 
 @Composable
-fun DashboardContent(viewModel: StudentViewModel) {
+fun DashboardContent(viewModel: StudentViewModel, onTabChange: (Int) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Header
         Surface(
@@ -213,7 +213,8 @@ fun DashboardContent(viewModel: StudentViewModel) {
                     subtitle = "Check today's classes",
                     icon = Icons.Default.DateRange,
                     containerColor = DeepGreen,
-                    contentColor = Color.White
+                    contentColor = Color.White,
+                    onClick = { onTabChange(1) }
                 )
             }
             item {
@@ -222,7 +223,8 @@ fun DashboardContent(viewModel: StudentViewModel) {
                     subtitle = "Recent evaluations",
                     icon = Icons.Default.MilitaryTech,
                     containerColor = Color.White,
-                    contentColor = DeepGreen
+                    contentColor = DeepGreen,
+                    onClick = { onTabChange(2) }
                 )
             }
             item {
@@ -231,7 +233,8 @@ fun DashboardContent(viewModel: StudentViewModel) {
                     subtitle = "View your record",
                     icon = Icons.Default.ContactPage,
                     containerColor = Color.White,
-                    contentColor = DeepGreen
+                    contentColor = DeepGreen,
+                    onClick = { onTabChange(3) }
                 )
             }
 
@@ -270,8 +273,9 @@ fun StudentStatsCard(count: String, label: String, icon: androidx.compose.ui.gra
 }
 
 @Composable
-fun QuickAccessItem(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, containerColor: Color, contentColor: Color) {
+fun QuickAccessItem(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, containerColor: Color, contentColor: Color, onClick: () -> Unit) {
     Surface(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(80.dp),
         shape = RoundedCornerShape(20.dp),
         color = containerColor,

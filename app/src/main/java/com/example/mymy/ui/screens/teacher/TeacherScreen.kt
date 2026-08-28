@@ -19,9 +19,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.rememberLauncherForActivityResult
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.TimeZone
@@ -171,8 +168,10 @@ fun TeacherScreen(
         if (showGradeDialog != null) {
             GradeEntryDialog(
                 student = showGradeDialog!!,
+                subjects = viewModel.scheduleList.mapNotNull { it.subject }.distinct(),
                 onDismiss = { showGradeDialog = null },
-                onSave = { subject, score, remarks ->
+                onSave = { subject, score, quarter, remarks ->
+                    viewModel.selectedQuarter = quarter
                     viewModel.uploadGrade(showGradeDialog!!.id, subject, score, remarks)
                     showGradeDialog = null
                 }
@@ -502,14 +501,6 @@ fun SectionCard(section: com.example.mymy.data.model.Section, studentCount: Int,
                     color = DeepGreen
                 )
                 Text("S.Y. 2025-2026", style = MaterialTheme.typography.bodySmall, color = LightText)
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Person, null, modifier = Modifier.size(14.dp), tint = DeepGreen)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Adviser: Teacher", style = MaterialTheme.typography.labelSmall, color = DeepGreen)
-                }
             }
             
             Column(horizontalAlignment = Alignment.End) {
@@ -527,6 +518,8 @@ fun SectionStudentsScreen(
     onBack: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var expandedQuarter by remember { mutableStateOf(false) }
+    val quarters = listOf("Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4")
     
     val sectionStudents = remember(viewModel.students, section.id) {
         viewModel.students.filter { it.sectionId == section.id }
@@ -568,6 +561,45 @@ fun SectionStudentsScreen(
                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color(0xFFF0F0F0))
             )
             
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Quarter Selector
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { expandedQuarter = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepGreen)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (viewModel.selectedQuarter.isEmpty()) "Select Quarter" else viewModel.selectedQuarter,
+                            color = if (viewModel.selectedQuarter.isEmpty()) LightText else DeepGreen
+                        )
+                        Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen)
+                    }
+                }
+                DropdownMenu(
+                    expanded = expandedQuarter,
+                    onDismissRequest = { expandedQuarter = false },
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    quarters.forEach { quarter ->
+                        DropdownMenuItem(
+                            text = { Text(quarter) },
+                            onClick = {
+                                viewModel.selectedQuarter = quarter
+                                expandedQuarter = false
+                            }
+                        )
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.height(24.dp))
             
             Text("STUDENT LIST", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
@@ -578,6 +610,7 @@ fun SectionStudentsScreen(
                     StudentGradeRow(
                         student = student,
                         subjects = viewModel.scheduleList.mapNotNull { it.subject }.distinct(),
+                        selectedQuarter = viewModel.selectedQuarter,
                         onSaveGrade = { subj, score, remark ->
                             viewModel.uploadGrade(student.id, subj, score, remark)
                         }
@@ -600,6 +633,7 @@ fun SectionStudentsScreen(
 fun StudentGradeRow(
     student: User,
     subjects: List<String>,
+    selectedQuarter: String,
     onSaveGrade: (String, Double, String) -> Unit
 ) {
     var score by remember { mutableStateOf("") }
@@ -681,7 +715,8 @@ fun StudentGradeRow(
                                 onSaveGrade(selectedSubject, s, selectedRemark)
                             }
                         },
-                        modifier = Modifier.size(40.dp).background(DeepGreen, RoundedCornerShape(8.dp))
+                        enabled = selectedQuarter.isNotEmpty(),
+                        modifier = Modifier.size(40.dp).background(if (selectedQuarter.isNotEmpty()) DeepGreen else Color.Gray, RoundedCornerShape(8.dp))
                     ) {
                         Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
@@ -784,22 +819,6 @@ fun SectionAttendanceDetailScreen(
         section.id?.let { viewModel.fetchAttendanceForSection(it, viewModel.selectedDate) }
     }
 
-    val scanLauncher = rememberLauncherForActivityResult(
-        contract = ScanContract(),
-        onResult = { result ->
-            result.contents?.let { studentNo ->
-                val student = viewModel.students.find { it.studentNo == studentNo }
-                if (student != null && selectedSchedule != null) {
-                    viewModel.markAttendance(student.id, "Present", selectedSchedule!!)
-                } else if (student == null) {
-                    viewModel.errorMessage = "Student with ID $studentNo not found"
-                } else {
-                    viewModel.errorMessage = "Please select a schedule first"
-                }
-            }
-        }
-    )
-
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(140.dp),
@@ -821,27 +840,6 @@ fun SectionAttendanceDetailScreen(
                 }
                 
                 Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-                    FilledTonalButton(
-                        onClick = {
-                            val options = ScanOptions()
-                            options.setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                            options.setPrompt("Scan Student ID QR Code")
-                            options.setBeepEnabled(true)
-                            options.setOrientationLocked(false)
-                            scanLauncher.launch(options)
-                        },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.2f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(Icons.Default.QrCodeScanner, null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Scan", style = MaterialTheme.typography.labelSmall)
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-
                     Surface(
                         onClick = { showDatePicker = true },
                         color = Color.White.copy(alpha = 0.2f),
@@ -945,33 +943,6 @@ fun SectionAttendanceDetailScreen(
                             }
                             
                             StatusBadge(status)
-
-                            Spacer(modifier = Modifier.width(8.dp))
-                            
-                            // Manual Update Options
-                            var showActions by remember { mutableStateOf(false) }
-                            IconButton(onClick = { showActions = true }) {
-                                Icon(Icons.Default.MoreVert, null, tint = LightText)
-                            }
-
-                            if (showActions) {
-                                androidx.compose.ui.window.Dialog(onDismissRequest = { showActions = false }) {
-                                    Surface(shape = RoundedCornerShape(16.dp), color = Color.White) {
-                                        Column(modifier = Modifier.padding(16.dp)) {
-                                            Text("Mark ${student.name} as:", fontWeight = FontWeight.Bold)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            TextButton(onClick = { 
-                                                selectedSchedule?.let { viewModel.markAttendance(student.id, "Present", it) }
-                                                showActions = false 
-                                            }) { Text("Present", color = SageGreen) }
-                                            TextButton(onClick = { 
-                                                selectedSchedule?.let { viewModel.markAttendance(student.id, "Absent", it) }
-                                                showActions = false 
-                                            }) { Text("Absent", color = Color.Red) }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -1014,120 +985,167 @@ fun TeacherProfile(viewModel: TeacherViewModel, onLogout: () -> Unit) {
 @Composable
 fun TeacherGradingScreen(viewModel: TeacherViewModel) {
     var selectedSubject by remember { mutableStateOf(viewModel.scheduleList.firstOrNull()?.subject ?: "All Subjects") }
-    var expanded by remember { mutableStateOf(false) }
+    var expandedSubject by remember { mutableStateOf(false) }
+    var expandedQuarter by remember { mutableStateOf(false) }
     
     val subjects = viewModel.scheduleList.mapNotNull { it.subject }.distinct()
+    val quarters = listOf("Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4")
     
     Column(modifier = Modifier.fillMaxSize().background(BackgroundColor).padding(24.dp)) {
         Text("GRADING SYSTEM", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Subject Selector
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepGreen)
-            ) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Subject: $selectedSubject")
-                    Icon(Icons.Default.ArrowDropDown, null)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Quarter Selector
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { expandedQuarter = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepGreen)
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (viewModel.selectedQuarter.isEmpty()) "Select Quarter" else viewModel.selectedQuarter, maxLines = 1)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                }
+                DropdownMenu(expanded = expandedQuarter, onDismissRequest = { expandedQuarter = false }) {
+                    quarters.forEach { quarter ->
+                        DropdownMenuItem(
+                            text = { Text(quarter) },
+                            onClick = {
+                                viewModel.selectedQuarter = quarter
+                                expandedQuarter = false
+                            }
+                        )
+                    }
                 }
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                subjects.forEach { subject ->
-                    DropdownMenuItem(
-                        text = { Text(subject) },
-                        onClick = {
-                            selectedSubject = subject
-                            expanded = false
-                        }
-                    )
+
+            // Subject Selector
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { expandedSubject = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepGreen)
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(selectedSubject, maxLines = 1)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                }
+                DropdownMenu(expanded = expandedSubject, onDismissRequest = { expandedSubject = false }) {
+                    subjects.forEach { subject ->
+                        DropdownMenuItem(
+                            text = { Text(subject) },
+                            onClick = {
+                                selectedSubject = subject
+                                expandedSubject = false
+                            }
+                        )
+                    }
                 }
             }
         }
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Student List for Grading
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            val enrolledStudents = viewModel.students.filter { student ->
-                val scheduleForSubject = viewModel.scheduleList.filter { it.subject == selectedSubject }
-                val targetSectionIds = scheduleForSubject.mapNotNull { it.sectionId }.toSet()
-                val targetStudentIds = scheduleForSubject.mapNotNull { it.studentId }.toSet()
-                
-                targetStudentIds.contains(student.id) || 
-                targetStudentIds.contains(student.studentNo) ||
-                (student.sectionId != null && targetSectionIds.contains(student.sectionId))
+        if (viewModel.selectedQuarter.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Please select a quarter to begin grading", color = LightText)
             }
-            
-            items(enrolledStudents) { student ->
-                val existingGrade = viewModel.studentGrades[student.id]?.find { it.subject == selectedSubject }
-                var gradeInput by remember(student.id, selectedSubject) { mutableStateOf(existingGrade?.score?.toString() ?: "") }
+        } else {
+            // Student List for Grading
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                val enrolledStudents = viewModel.students.filter { student ->
+                    val scheduleForSubject = viewModel.scheduleList.filter { it.subject == selectedSubject }
+                    val targetSectionIds = scheduleForSubject.mapNotNull { it.sectionId }.toSet()
+                    val targetStudentIds = scheduleForSubject.mapNotNull { it.studentId }.toSet()
+                    
+                    targetStudentIds.contains(student.id) || 
+                    targetStudentIds.contains(student.studentNo) ||
+                    (student.sectionId != null && targetSectionIds.contains(student.sectionId))
+                }
                 
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White,
-                    shadowElevation = 2.dp
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
-                            Text("ID: ${student.studentNo ?: student.id.take(8)}", style = MaterialTheme.typography.bodySmall, color = LightText)
-                        }
-                        
-                        OutlinedTextField(
-                            value = gradeInput,
-                            onValueChange = { gradeInput = it },
-                            modifier = Modifier.width(80.dp),
-                            placeholder = { Text("0.0") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = Color(0xFFF0F0F0),
-                                focusedBorderColor = SageGreen
-                            )
-                        )
-                        
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        IconButton(
-                            onClick = { 
-                                val score = gradeInput.toDoubleOrNull() ?: 0.0
-                                viewModel.uploadGrade(student.id, selectedSubject, score)
-                            },
-                            colors = IconButtonDefaults.iconButtonColors(containerColor = LightGreen)
-                        ) {
-                            Icon(Icons.Default.Check, "Save", tint = DeepGreen)
-                        }
+                items(enrolledStudents) { student ->
+                    val existingGrade = viewModel.studentGrades[student.id]?.find { 
+                        it.subject == selectedSubject && it.quarter == viewModel.selectedQuarter 
                     }
-                }
-            }
-            
-            if (enrolledStudents.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.HistoryEdu, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No students found for this subject", color = LightText, style = MaterialTheme.typography.bodyMedium)
-                        }
+                    var gradeInput by remember(student.id, selectedSubject, viewModel.selectedQuarter) { 
+                        mutableStateOf(existingGrade?.score?.toString() ?: "") 
                     }
-                }
-            } else {
-                item {
-                    Button(
-                        onClick = {
-                            // In a real bulk save, we'd collect all inputs
-                            // For now, the per-row save is safer for Supabase
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
+                    val isLocked = existingGrade != null
+                    
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isLocked) Color(0xFFF5F5F5) else Color.White,
+                        shadowElevation = if (isLocked) 0.dp else 2.dp,
+                        border = if (isLocked) null else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
                     ) {
-                        Text("Save All Changes", fontWeight = FontWeight.Bold)
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = if (isLocked) DeepGreen.copy(alpha = 0.6f) else DeepGreen)
+                                Text("ID: ${student.studentNo ?: student.id.take(8)}", style = MaterialTheme.typography.bodySmall, color = LightText)
+                                if (isLocked) {
+                                    Text("Grade Recorded", style = MaterialTheme.typography.labelSmall, color = SageGreen, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            
+                            OutlinedTextField(
+                                value = gradeInput,
+                                onValueChange = { if (!isLocked) gradeInput = it },
+                                modifier = Modifier.width(80.dp),
+                                placeholder = { Text("0.0") },
+                                singleLine = true,
+                                enabled = !isLocked,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = Color(0xFFF0F0F0),
+                                    focusedBorderColor = SageGreen,
+                                    disabledTextColor = DeepGreen,
+                                    disabledBorderColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent
+                                )
+                            )
+                            
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            IconButton(
+                                onClick = { 
+                                    val score = gradeInput.toDoubleOrNull()
+                                    if (score != null) {
+                                        viewModel.uploadGrade(student.id, selectedSubject, score)
+                                    } else {
+                                        viewModel.errorMessage = "Invalid grade"
+                                    }
+                                },
+                                enabled = !isLocked,
+                                colors = IconButtonDefaults.iconButtonColors(
+                                    containerColor = if (isLocked) Color.Transparent else LightGreen,
+                                    disabledContainerColor = Color.Transparent
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.Check,
+                                    contentDescription = "Save",
+                                    tint = if (isLocked) LightText else DeepGreen
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                if (enrolledStudents.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.HistoryEdu, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("No students found for this subject", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
                     }
                 }
             }
@@ -1136,11 +1154,21 @@ fun TeacherGradingScreen(viewModel: TeacherViewModel) {
 }
 
 @Composable
-fun GradeEntryDialog(student: User, onDismiss: () -> Unit, onSave: (String, Double, String) -> Unit) {
-    var subject by remember { mutableStateOf("") }
+fun GradeEntryDialog(
+    student: User, 
+    subjects: List<String>,
+    onDismiss: () -> Unit, 
+    onSave: (String, Double, String, String) -> Unit
+) {
+    var selectedSubject by remember { mutableStateOf(subjects.firstOrNull() ?: "") }
+    var selectedQuarter by remember { mutableStateOf("Quarter 1") }
     var score by remember { mutableStateOf("") }
     var remarks by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var expandedSubject by remember { mutableStateOf(false) }
+    var expandedQuarter by remember { mutableStateOf(false) }
+    
+    val quarters = listOf("Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1149,14 +1177,43 @@ fun GradeEntryDialog(student: User, onDismiss: () -> Unit, onSave: (String, Doub
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Student: ${student.name}", style = MaterialTheme.typography.bodyMedium, color = LightText)
                 
-                OutlinedTextField(
-                    value = subject, 
-                    onValueChange = { subject = it; isError = false }, 
-                    label = { Text("Subject Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = isError && subject.isBlank(),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                // Subject Selector
+                Box {
+                    OutlinedButton(
+                        onClick = { expandedSubject = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (selectedSubject.isEmpty()) "Select Subject" else selectedSubject, color = DeepGreen)
+                            Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen)
+                        }
+                    }
+                    DropdownMenu(expanded = expandedSubject, onDismissRequest = { expandedSubject = false }) {
+                        subjects.forEach { subj ->
+                            DropdownMenuItem(text = { Text(subj) }, onClick = { selectedSubject = subj; expandedSubject = false })
+                        }
+                    }
+                }
+
+                // Quarter Selector
+                Box {
+                    OutlinedButton(
+                        onClick = { expandedQuarter = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(selectedQuarter, color = DeepGreen)
+                            Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen)
+                        }
+                    }
+                    DropdownMenu(expanded = expandedQuarter, onDismissRequest = { expandedQuarter = false }) {
+                        quarters.forEach { q ->
+                            DropdownMenuItem(text = { Text(q) }, onClick = { selectedQuarter = q; expandedQuarter = false })
+                        }
+                    }
+                }
                 
                 OutlinedTextField(
                     value = score, 
@@ -1188,8 +1245,8 @@ fun GradeEntryDialog(student: User, onDismiss: () -> Unit, onSave: (String, Doub
             Button(
                 onClick = { 
                     val numericScore = score.toDoubleOrNull()
-                    if (subject.isNotBlank() && numericScore != null) {
-                        onSave(subject, numericScore, remarks)
+                    if (selectedSubject.isNotBlank() && numericScore != null) {
+                        onSave(selectedSubject, numericScore, selectedQuarter, remarks)
                     } else {
                         isError = true
                     }

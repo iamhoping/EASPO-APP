@@ -210,13 +210,10 @@ class SchoolAdminViewModel : ViewModel() {
                     }
                 } catch (e: Exception) { Log.e("SchoolAdminVM", "Cleanup enrollments failed", e) }
 
-                // 4. Nullify Teacher/Adviser/Parent/Child references
+                // 4. Nullify Teacher/Parent/Child references
                 try {
                     SupabaseConfig.client.postgrest["schedules"].update(mapOf("teacher_id" to null)) {
                         filter { eq("teacher_id", id) }
-                    }
-                    SupabaseConfig.client.postgrest["sections"].update(mapOf("adviser_id" to null)) {
-                        filter { eq("adviser_id", id) }
                     }
                     SupabaseConfig.client.postgrest["profiles"].update(mapOf("child_id" to null)) {
                         filter { eq("child_id", id) }
@@ -240,12 +237,12 @@ class SchoolAdminViewModel : ViewModel() {
         }
     }
 
-    fun createSection(name: String, gradeLevel: String, adviserId: String? = null, studentIds: List<String> = emptyList()) {
+    fun createSection(name: String, gradeLevel: String, studentIds: List<String> = emptyList()) {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
-                val section = Section(name = name, gradeLevel = gradeLevel, adviserId = adviserId)
+                val section = Section(name = name, gradeLevel = gradeLevel)
                 val response = SupabaseConfig.client.postgrest["sections"].insert(section) {
                     select()
                 }.decodeSingle<Section>()

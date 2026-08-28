@@ -70,6 +70,7 @@ data class Grade(
     @SerialName("subject_id") val subjectId: Int? = null,
     val score: Double,
     val remarks: String? = null,
+    val quarter: String? = null,
     @SerialName("created_at") val createdAt: String? = null
 )
 
@@ -85,7 +86,6 @@ data class Section(
     val id: Long? = null,
     val name: String,
     @SerialName("grade_level") val gradeLevel: String,
-    @SerialName("adviser_id") val adviserId: String? = null,
     val status: String? = "Pending",
     @SerialName("created_at") val createdAt: String? = null
 )

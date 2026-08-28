@@ -30,6 +30,7 @@ class TeacherViewModel : ViewModel() {
     var studentGrades by mutableStateOf<Map<String, List<Grade>>>(emptyMap()) // studentId -> list of grades
     var attendanceRecords by mutableStateOf<List<Attendance>>(emptyList())
     var selectedDate by mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()))
+    var selectedQuarter by mutableStateOf("")
     
     var isLoading by mutableStateOf(false)
 
@@ -154,7 +155,7 @@ class TeacherViewModel : ViewModel() {
                 
                 val sectionIdsFromSchedules = fetchedSchedules.mapNotNull { it.sectionId }.toSet()
                 sections = allSections.filter { 
-                    it.adviserId == userId || (customTeacherId != null && it.adviserId == customTeacherId) || it.id in sectionIdsFromSchedules
+                    it.id in sectionIdsFromSchedules
                 }
                 Log.d("TeacherVM", "Matched ${sections.size} sections")
 
@@ -300,6 +301,10 @@ class TeacherViewModel : ViewModel() {
     }
 
     fun uploadGrade(studentId: String, subject: String, score: Double, remarks: String? = null) {
+        if (selectedQuarter.isEmpty()) {
+            errorMessage = "Please select a quarter first"
+            return
+        }
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
@@ -310,7 +315,12 @@ class TeacherViewModel : ViewModel() {
                 fetchGradesForStudents(students.map { it.id })
             } catch (e: Exception) {
                 Log.e("TeacherVM", "Error uploading grade", e)
-                errorMessage = e.message ?: "Failed to upload grade"
+                if (e.message?.contains("duplicate", ignoreCase = true) == true || 
+                    e.message?.contains("unique constraint", ignoreCase = true) == true) {
+                    errorMessage = "Already have grade for this quarter."
+                } else {
+                    errorMessage = e.message ?: "Failed to upload grade"
+                }
             } finally {
                 isLoading = false
             }
@@ -326,24 +336,16 @@ class TeacherViewModel : ViewModel() {
             subject = subject,
             score = score,
             remarks = remarks,
+            quarter = selectedQuarter,
             createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
         )
         
-        // Check if grade already exists for this student and subject
+        // Check if grade already exists for this student, subject, and quarter
         val existingGrades = studentGrades[studentId] ?: emptyList()
-        val existingGrade = existingGrades.find { it.subject == subject }
+        val existingGrade = existingGrades.find { it.subject == subject && it.quarter == selectedQuarter }
 
         if (existingGrade != null) {
-            SupabaseConfig.client.postgrest["grades"].update(
-                mapOf(
-                    "score" to score,
-                    "remarks" to remarks,
-                    "teacher_id" to teacherId,
-                    "created_at" to grade.createdAt
-                )
-            ) {
-                filter { eq("id", existingGrade.id ?: -1) }
-            }
+            throw Exception("Already have grade for this quarter.")
         } else {
             SupabaseConfig.client.postgrest["grades"].insert(grade)
         }
