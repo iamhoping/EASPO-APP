@@ -9,7 +9,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -22,9 +25,13 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -34,6 +41,7 @@ import com.example.mymy.data.model.Schedule
 import com.example.mymy.data.model.Section
 import com.example.mymy.data.model.User
 import com.example.mymy.data.model.UserRole
+import com.example.mymy.data.model.Attendance
 import com.example.mymy.ui.components.ProfileDashboard
 import com.example.mymy.ui.theme.BackgroundColor
 import com.example.mymy.ui.theme.DeepGreen
@@ -128,6 +136,7 @@ fun ManageSubjectDialog(
 
     var gradeExpanded by remember { mutableStateOf(false) }
     val gradeLevels = (7..12).map { it.toString() }
+    val focusManager = LocalFocusManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -139,14 +148,18 @@ fun ManageSubjectDialog(
                     onValueChange = { name = it },
                     label = { Text("Subject Name") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                 )
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it },
                     label = { Text("Subject Code") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                 )
 
                 ExposedDropdownMenuBox(expanded = gradeExpanded, onExpandedChange = { gradeExpanded = it }) {
@@ -157,11 +170,13 @@ fun ManageSubjectDialog(
                         label = { Text("Grade Level") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gradeExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = gradeExpanded, onDismissRequest = { gradeExpanded = false }) {
                         gradeLevels.forEach { lvl ->
-                            DropdownMenuItem(text = { Text("Grade $lvl") }, onClick = { gradeLevel = lvl; gradeExpanded = false })
+                            DropdownMenuItem(text = { Text("Grade $lvl") }, onClick = { gradeLevel = lvl; gradeExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
                         }
                     }
                 }
@@ -172,7 +187,12 @@ fun ManageSubjectDialog(
                     label = { Text("Units") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (name.isNotBlank() && code.isNotBlank()) {
+                            onSave(subject.copy(name = name, code = code, gradeLevel = gradeLevel, units = units.toIntOrNull() ?: 3))
+                        }
+                    })
                 )
 
                 if (subject.id != null) {
@@ -219,6 +239,7 @@ fun SchoolAdminScreen(
     val schedules = viewModel.allSchedules
     val sections = viewModel.allSections
     val isLoading = viewModel.isLoading
+    val focusManager = LocalFocusManager.current
     
     var selectedTab by remember { mutableIntStateOf(0) }
     var showUserDialog by remember { mutableStateOf(false) }
@@ -231,6 +252,8 @@ fun SchoolAdminScreen(
     var showAttendanceLog by remember { mutableStateOf(false) }
     var userToDelete by remember { mutableStateOf<User?>(null) }
     var sectionToDelete by remember { mutableStateOf<Section?>(null) }
+    var userToApprove by remember { mutableStateOf<User?>(null) }
+    var userToReject by remember { mutableStateOf<User?>(null) }
     var viewingSection by remember { mutableStateOf<Section?>(null) }
     var studentToRemoveFromSection by remember { mutableStateOf<User?>(null) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
@@ -400,6 +423,9 @@ fun SchoolAdminScreen(
                         onLogout = { showLogoutConfirmation = true },
                         onRegisterUser = {
                             selectedTab = 1
+                            viewModel.roleFilter = null
+                            viewModel.statusFilter = null
+                            viewModel.searchQuery = ""
                             showUserDialog = true
                         },
                         onCreateSchedule = {
@@ -407,7 +433,13 @@ fun SchoolAdminScreen(
                             editingSchedule = Schedule(subject = "", day = "Monday", startTime = "08:00:00", endTime = "09:00:00", room = "")
                             showScheduleDialog = true
                         },
-                        onViewAttendance = { showAttendanceLog = true }
+                        onViewAttendance = { showAttendanceLog = true },
+                        onViewPending = {
+                            selectedTab = 1
+                            viewModel.roleFilter = null
+                            viewModel.statusFilter = "pending"
+                            viewModel.searchQuery = ""
+                        }
                     )
                     1 -> UserList(
                         users = filteredUsers,
@@ -415,7 +447,11 @@ fun SchoolAdminScreen(
                         onSearchChange = { viewModel.searchQuery = it },
                         selectedRole = viewModel.roleFilter,
                         onRoleChange = { viewModel.roleFilter = it },
-                        onConfirmDelete = { userToDelete = it }
+                        selectedStatus = viewModel.statusFilter,
+                        onStatusChange = { viewModel.statusFilter = it },
+                        onConfirmDelete = { userToDelete = it },
+                        onApprove = { userToApprove = it },
+                        onReject = { userToReject = it }
                     )
                     2 -> AdminScheduleList(schedules, users, viewModel.allEnrollments, onEditSchedule = { 
                         editingSchedule = it
@@ -472,9 +508,10 @@ fun SchoolAdminScreen(
         if (showUserDialog) {
             RegisterUserDialog(
                 students = users.filter { it.role == UserRole.STUDENT },
+                sections = sections,
                 onDismiss = { showUserDialog = false },
-                onSave = { name, email, pass, role, sId, tId, childId, pId, gender, contact, address, guardian, grade ->
-                    viewModel.registerUser(name, email, pass, role, sId, tId, childId, pId, gender, contact, address, guardian, grade)
+                onSave = { name, email, pass, role, sId, tId, childId, pId, gender, contact, address, guardian, grade, status, sectionId ->
+                    viewModel.registerUser(name, email, pass, role, sId, tId, childId, pId, gender, contact, address, guardian, grade, status, sectionId)
                     showUserDialog = false
                 }
             )
@@ -563,7 +600,12 @@ fun SchoolAdminScreen(
         }
 
         if (showAttendanceLog) {
-            // ... existing attendance dialog ...
+            AttendanceLogDialog(
+                attendanceList = viewModel.allAttendance,
+                users = viewModel.allUsers,
+                sections = viewModel.allSections,
+                onDismiss = { showAttendanceLog = false }
+            )
         }
 
         if (sectionToDelete != null) {
@@ -604,6 +646,34 @@ fun SchoolAdminScreen(
                 onDismiss = { userToDelete = null }
             )
         }
+
+        if (userToApprove != null) {
+            ElegantDialog(
+                onDismiss = { userToApprove = null },
+                title = "Approve User",
+                message = "Are you sure you want to approve ${userToApprove?.name}'s registration? They will be able to log in immediately.",
+                type = DialogType.INFO,
+                confirmButtonText = "Approve",
+                onConfirm = {
+                    userToApprove?.let { viewModel.approveUser(it) }
+                    userToApprove = null
+                }
+            )
+        }
+
+        if (userToReject != null) {
+            ElegantDialog(
+                onDismiss = { userToReject = null },
+                title = "Reject User",
+                message = "Are you sure you want to reject ${userToReject?.name}'s registration? Their account will remain inactive.",
+                type = DialogType.WARNING,
+                confirmButtonText = "Reject",
+                onConfirm = {
+                    userToReject?.let { viewModel.rejectUser(it) }
+                    userToReject = null
+                }
+            )
+        }
     }
 }
 
@@ -613,7 +683,8 @@ fun DashboardHome(
     onLogout: () -> Unit,
     onRegisterUser: () -> Unit,
     onCreateSchedule: () -> Unit,
-    onViewAttendance: () -> Unit
+    onViewAttendance: () -> Unit,
+    onViewPending: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -696,6 +767,32 @@ fun DashboardHome(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
+            if (viewModel.pendingUsers.isNotEmpty()) {
+                Surface(
+                    onClick = onViewPending,
+                    color = SageGreen.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).background(SageGreen, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.NotificationsActive, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                            Text("${viewModel.pendingUsers.size} Pending Registrations", fontWeight = FontWeight.Bold, color = DeepGreen)
+                            Text("Review and approve new accounts", style = MaterialTheme.typography.bodySmall, color = DeepGreen.copy(alpha = 0.7f))
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = DeepGreen)
+                    }
+                }
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionButtonExtended(
                     label = "Register New User",
@@ -774,7 +871,11 @@ fun UserList(
     onSearchChange: (String) -> Unit,
     selectedRole: UserRole?,
     onRoleChange: (UserRole?) -> Unit,
-    onConfirmDelete: (User) -> Unit
+    selectedStatus: String?,
+    onStatusChange: (String?) -> Unit,
+    onConfirmDelete: (User) -> Unit,
+    onApprove: (User) -> Unit,
+    onReject: (User) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Curved Header
@@ -807,6 +908,8 @@ fun UserList(
                     }
                 },
                 shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { /* cleared via LocalFocusManager inside parent if needed or local */ }),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = DeepGreen,
                     unfocusedBorderColor = Color(0xFFE0E0E0),
@@ -847,6 +950,10 @@ fun UserList(
                     )
                 }
             }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+
+
         }
 
         LazyColumn(
@@ -882,6 +989,42 @@ fun UserList(
 
                         IconButton(onClick = { onConfirmDelete(user) }) {
                             Icon(Icons.Default.Delete, "Delete", tint = ErrorColor)
+                        }
+                    }
+                    
+                    if (user.status == "pending") {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { onReject(user) },
+                                colors = ButtonDefaults.textButtonColors(contentColor = ErrorColor)
+                            ) {
+                                Text("Reject")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { onApprove(user) },
+                                colors = ButtonDefaults.buttonColors(containerColor = DeepGreen),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Approve")
+                            }
+                        }
+                    } else if (user.status == "rejected") {
+                         Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                             Icon(Icons.Default.Info, null, tint = ErrorColor, modifier = Modifier.size(16.dp))
+                             Spacer(modifier = Modifier.width(8.dp))
+                             Text("Registration Rejected", color = ErrorColor, style = MaterialTheme.typography.labelSmall)
+                             Spacer(modifier = Modifier.weight(1f))
+                             TextButton(onClick = { onApprove(user) }) {
+                                 Text("Re-approve")
+                             }
                         }
                     }
                 }
@@ -1227,6 +1370,7 @@ fun AddStudentToSectionDialog(
             (searchQuery.isEmpty() || (user.name?.contains(searchQuery, ignoreCase = true) == true) || (user.studentNo?.contains(searchQuery) == true))
         }
     }
+    val focusManager = LocalFocusManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1239,7 +1383,9 @@ fun AddStudentToSectionDialog(
                     label = { Text("Search Students") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     leadingIcon = { Icon(Icons.Default.Search, null) },
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
                 )
                 
                 if (availableStudents.isEmpty()) {
@@ -1308,6 +1454,7 @@ fun ManageSectionDialog(
 
     var gradeExpanded by remember { mutableStateOf(false) }
     val gradeLevels = (7..12).map { it.toString() }
+    val focusManager = LocalFocusManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1319,7 +1466,13 @@ fun ManageSectionDialog(
                     onValueChange = { name = it },
                     label = { Text("Section Name") },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (name.isNotBlank()) {
+                            onSave(name, gradeLevel, selectedStudentIds.toList())
+                        }
+                    })
                 )
 
                 ExposedDropdownMenuBox(expanded = gradeExpanded, onExpandedChange = { gradeExpanded = it }) {
@@ -1331,7 +1484,9 @@ fun ManageSectionDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gradeExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = section.id == null // Only allow changing grade for new sections
+                        enabled = section.id == null,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = gradeExpanded, onDismissRequest = { gradeExpanded = false }) {
                         gradeLevels.forEach { lvl ->
@@ -1426,10 +1581,154 @@ fun ManageSectionDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun AttendanceLogDialog(
+    attendanceList: List<Attendance>,
+    users: List<User>,
+    sections: List<Section>,
+    onDismiss: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Attendance Logs",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = DeepGreen
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 500.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search by Student Name or Status") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+                
+                val filteredAttendance = attendanceList.filter { log ->
+                    val studentName = users.find { it.id == log.studentId }?.name ?: ""
+                    studentName.contains(searchQuery, ignoreCase = true) ||
+                            log.status.contains(searchQuery, ignoreCase = true)
+                }.sortedByDescending { it.date }
+                
+                if (filteredAttendance.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No attendance logs found",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(filteredAttendance) { log ->
+                            val studentName = users.find { it.id == log.studentId }?.name ?: "Unknown Student"
+                            val sectionName = sections.find { it.id == log.sectionId }?.name ?: "No Section"
+                            
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F9F6))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = studentName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DeepGreen
+                                        )
+                                        
+                                        val statusColor = when (log.status.lowercase()) {
+                                            "present" -> Color(0xFF43A047)
+                                            "absent" -> Color(0xFFE53935)
+                                            "late" -> Color(0xFFFFB300)
+                                            else -> Color.Gray
+                                        }
+                                        
+                                        Surface(
+                                            color = statusColor.copy(alpha = 0.1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text(
+                                                text = log.status.replaceFirstChar { it.uppercase() },
+                                                color = statusColor,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    
+                                    Text(
+                                        text = "Section: $sectionName",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.Gray
+                                    )
+                                    
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    
+                                    Text(
+                                        text = "Date: ${log.date}" + 
+                                                (if (!log.timeIn.isNullOrBlank()) " | In: ${log.timeIn}" else "") +
+                                                (if (!log.timeOut.isNullOrBlank()) " | Out: ${log.timeOut}" else ""),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.DarkGray
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = DeepGreen, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun RegisterUserDialog(
     students: List<User>,
+    sections: List<Section>,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, UserRole, String?, String?, String?, String?, String?, String?, String?, String?, String?) -> Unit
+    onSave: (String, String, String, UserRole, String?, String?, String?, String?, String?, String?, String?, String?, String?, String, Long?) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -1444,20 +1743,36 @@ fun RegisterUserDialog(
     var parentId by remember { mutableStateOf("") }
     var childId by remember { mutableStateOf<String?>(null) }
     var guardianEmail by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("active") }
+    var selectedSectionId by remember { mutableStateOf<Long?>(null) }
     
     var roleExpanded by remember { mutableStateOf(false) }
     var genderExpanded by remember { mutableStateOf(false) }
     var gradeExpanded by remember { mutableStateOf(false) }
+    var sectionExpanded by remember { mutableStateOf(false) }
 
     val genders = listOf("Male", "Female")
     val gradeLevels = (7..12).map { it.toString() }
+    val focusManager = LocalFocusManager.current
+
+    val filteredSections = remember(gradeLevel, sections) {
+        sections.filter { it.gradeLevel == gradeLevel }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Register New User", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(
+                    value = name, 
+                    onValueChange = { name = it }, 
+                    label = { Text("Full Name") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+                )
                 OutlinedTextField(
                     value = email, 
                     onValueChange = { email = it }, 
@@ -1469,7 +1784,9 @@ fun RegisterUserDialog(
                         if (email.isNotBlank() && !isValidEmail(email)) {
                             Text("Invalid email format", color = Color.Red)
                         }
-                    }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                 )
                 OutlinedTextField(
                     value = password, 
@@ -1482,10 +1799,28 @@ fun RegisterUserDialog(
                         if (password.isNotBlank() && password.length < 6) {
                             Text("Password must be at least 6 characters", color = Color.Red)
                         }
-                    }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                 )
-                OutlinedTextField(value = contact, onValueChange = { contact = it }, label = { Text("Contact Number") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(
+                    value = contact, 
+                    onValueChange = { contact = it }, 
+                    label = { Text("Contact Number") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+                )
+                OutlinedTextField(
+                    value = address, 
+                    onValueChange = { address = it }, 
+                    label = { Text("Address") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+                )
                 
                 ExposedDropdownMenuBox(expanded = genderExpanded, onExpandedChange = { genderExpanded = it }) {
                     OutlinedTextField(
@@ -1495,11 +1830,13 @@ fun RegisterUserDialog(
                         label = { Text("Gender") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = genderExpanded, onDismissRequest = { genderExpanded = false }) {
                         genders.forEach { g ->
-                            DropdownMenuItem(text = { Text(g) }, onClick = { gender = g; genderExpanded = false })
+                            DropdownMenuItem(text = { Text(g) }, onClick = { gender = g; genderExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
                         }
                     }
                 }
@@ -1512,14 +1849,19 @@ fun RegisterUserDialog(
                         label = { Text("Role") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = roleExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = roleExpanded, onDismissRequest = { roleExpanded = false }) {
                         UserRole.entries.filter { it != UserRole.WEB_ADMIN }.forEach { r ->
-                            DropdownMenuItem(text = { Text(r.name) }, onClick = { role = r; roleExpanded = false })
+                            DropdownMenuItem(text = { Text(r.name) }, onClick = { role = r; roleExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
                         }
                     }
                 }
+
+                // Status selection for Admin
+
 
                 if (role == UserRole.STUDENT) {
                     ExposedDropdownMenuBox(expanded = gradeExpanded, onExpandedChange = { gradeExpanded = it }) {
@@ -1530,11 +1872,38 @@ fun RegisterUserDialog(
                             label = { Text("Grade Level") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = gradeExpanded) },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                         )
                         ExposedDropdownMenu(expanded = gradeExpanded, onDismissRequest = { gradeExpanded = false }) {
                             gradeLevels.forEach { lvl ->
-                                DropdownMenuItem(text = { Text("Grade $lvl") }, onClick = { gradeLevel = lvl; gradeExpanded = false })
+                                DropdownMenuItem(text = { Text("Grade $lvl") }, onClick = { 
+                                    gradeLevel = lvl; gradeExpanded = false
+                                    selectedSectionId = null // Reset section when grade changes
+                                    focusManager.moveFocus(FocusDirection.Down) 
+                                })
+                            }
+                        }
+                    }
+
+                    // Section Selection
+                    ExposedDropdownMenuBox(expanded = sectionExpanded, onExpandedChange = { sectionExpanded = it }) {
+                        OutlinedTextField(
+                            value = sections.find { it.id == selectedSectionId }?.name ?: "No Section",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Section (Optional)") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sectionExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+                        )
+                        ExposedDropdownMenu(expanded = sectionExpanded, onDismissRequest = { sectionExpanded = false }) {
+                            DropdownMenuItem(text = { Text("None") }, onClick = { selectedSectionId = null; sectionExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
+                            filteredSections.forEach { section ->
+                                DropdownMenuItem(text = { Text(section.name) }, onClick = { selectedSectionId = section.id; sectionExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
                             }
                         }
                     }
@@ -1551,7 +1920,9 @@ fun RegisterUserDialog(
                             }) {
                                 Icon(Icons.Default.Refresh, "Generate")
                             }
-                        }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     
                     OutlinedTextField(
@@ -1559,7 +1930,21 @@ fun RegisterUserDialog(
                         onValueChange = { guardianEmail = it },
                         label = { Text("Guardian Email") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            val isEmailValid = isValidEmail(email)
+                            val isFormValid = name.isNotBlank() && 
+                                            isEmailValid && 
+                                            password.length >= 6 &&
+                                            contact.isNotBlank() &&
+                                            (role != UserRole.PARENT || parentId.isNotBlank()) &&
+                                            (role != UserRole.STUDENT || studentId.isNotBlank()) &&
+                                            (role != UserRole.TEACHER || teacherId.isNotBlank())
+                            if (isFormValid) {
+                                onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, gradeLevel, status, selectedSectionId)
+                            }
+                        })
                     )
                 }
                 if (role == UserRole.TEACHER) {
@@ -1575,7 +1960,19 @@ fun RegisterUserDialog(
                             }) {
                                 Icon(Icons.Default.Refresh, "Generate")
                             }
-                        }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            val isEmailValid = isValidEmail(email)
+                            val isFormValid = name.isNotBlank() && 
+                                            isEmailValid && 
+                                            password.length >= 6 &&
+                                            contact.isNotBlank() &&
+                                            teacherId.isNotBlank()
+                            if (isFormValid) {
+                                onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, null, status, null)
+                            }
+                        })
                     )
                 }
                 if (role == UserRole.PARENT) {
@@ -1591,7 +1988,19 @@ fun RegisterUserDialog(
                             }) {
                                 Icon(Icons.Default.Refresh, "Generate")
                             }
-                        }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            val isEmailValid = isValidEmail(email)
+                            val isFormValid = name.isNotBlank() && 
+                                            isEmailValid && 
+                                            password.length >= 6 &&
+                                            contact.isNotBlank() &&
+                                            parentId.isNotBlank()
+                            if (isFormValid) {
+                                onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, null, status, null)
+                            }
+                        })
                     )
                 }
             }
@@ -1608,7 +2017,7 @@ fun RegisterUserDialog(
 
             Button(
                 onClick = { 
-                    onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, if (role == UserRole.STUDENT) gradeLevel else null)
+                    onSave(name, email, password, role, studentId, teacherId, childId, parentId, gender, contact, address, guardianEmail, if (role == UserRole.STUDENT) gradeLevel else null, status, selectedSectionId)
                 }, 
                 colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
                 enabled = isFormValid
@@ -1654,6 +2063,7 @@ fun ManageScheduleDialog(
     var teacherExpanded by remember { mutableStateOf(false) }
     var sectionExpanded by remember { mutableStateOf(false) }
     var dayExpanded by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
     val fromTimes = listOf(
@@ -1823,7 +2233,9 @@ fun ManageScheduleDialog(
                     onValueChange = { room = it }, 
                     label = { Text("Room / Location") }, 
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                 )
 
                 ExposedDropdownMenuBox(expanded = teacherExpanded, onExpandedChange = { teacherExpanded = it }) {
@@ -1834,7 +2246,9 @@ fun ManageScheduleDialog(
                         label = { Text("Teacher") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = teacherExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = teacherExpanded, onDismissRequest = { teacherExpanded = false }) {
                         teachers.forEach { teacher ->
@@ -1845,7 +2259,7 @@ fun ManageScheduleDialog(
                                         Text(teacher.email ?: "", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                                     }
                                 }, 
-                                onClick = { selectedTeacherId = teacher.id; teacherExpanded = false }
+                                onClick = { selectedTeacherId = teacher.id; teacherExpanded = false; focusManager.moveFocus(FocusDirection.Down) }
                             )
                         }
                     }
@@ -1859,10 +2273,12 @@ fun ManageScheduleDialog(
                         label = { Text("Section") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sectionExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
                     ExposedDropdownMenu(expanded = sectionExpanded, onDismissRequest = { sectionExpanded = false }) {
-                        DropdownMenuItem(text = { Text("None") }, onClick = { selectedSectionId = null; sectionExpanded = false })
+                        DropdownMenuItem(text = { Text("None") }, onClick = { selectedSectionId = null; sectionExpanded = false; focusManager.moveFocus(FocusDirection.Down) })
                         sections.forEach { section ->
                             DropdownMenuItem(
                                 text = { Text("${section.name} (Grade ${section.gradeLevel})") }, 
@@ -1872,6 +2288,7 @@ fun ManageScheduleDialog(
                                     val sectionStudents = students.filter { it.sectionId == section.id }.map { it.id }.toSet()
                                     selectedStudentIds = sectionStudents
                                     sectionExpanded = false 
+                                    focusManager.moveFocus(FocusDirection.Down)
                                 }
                             )
                         }
@@ -1896,7 +2313,14 @@ fun ManageScheduleDialog(
                         label = { Text("Subject") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subjectExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if ((subject ?: "").isNotBlank() && selectedTeacherId != null && isTimeValid) {
+                                // Trigger Save logic manually or let user click button
+                                focusManager.clearFocus()
+                            }
+                        })
                     )
                     ExposedDropdownMenu(expanded = subjectExpanded, onDismissRequest = { subjectExpanded = false }) {
                         filteredSubjects.forEach { s: com.example.mymy.data.model.Subject ->
@@ -1910,6 +2334,7 @@ fun ManageScheduleDialog(
                                 onClick = {
                                     subject = s.name
                                     subjectExpanded = false
+                                    focusManager.clearFocus()
                                 }
                             )
                         }

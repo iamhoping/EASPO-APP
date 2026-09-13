@@ -41,7 +41,8 @@ data class RegisterUserRequest(
     val gender: String? = null,
     val contact: String? = null,
     val address: String? = null,
-    @SerialName("grade_level") val gradeLevel: String? = null
+    @SerialName("grade_level") val gradeLevel: String? = null,
+    val status: String? = "active"
 )
 
 @Serializable

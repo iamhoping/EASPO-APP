@@ -18,9 +18,6 @@ import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.postgrest
-import io.ktor.client.statement.bodyAsText
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -29,6 +26,7 @@ class SchoolAdminViewModel : ViewModel() {
     var allTeachers by mutableStateOf<List<User>>(emptyList())
     var allParents by mutableStateOf<List<User>>(emptyList())
     var allUsers by mutableStateOf<List<User>>(emptyList())
+    var pendingUsers by mutableStateOf<List<User>>(emptyList())
     var allSchedules by mutableStateOf<List<Schedule>>(emptyList())
     var allEnrollments by mutableStateOf<List<Enrollment>>(emptyList())
     var allAttendance by mutableStateOf<List<Attendance>>(emptyList())
@@ -38,13 +36,15 @@ class SchoolAdminViewModel : ViewModel() {
     
     var searchQuery by mutableStateOf("")
     var roleFilter by mutableStateOf<UserRole?>(null)
+    var statusFilter by mutableStateOf<String?>(null)
 
     val filteredUsers: List<User>
         get() = allUsers.filter { user ->
             val matchesQuery = (user.name ?: "").contains(searchQuery, ignoreCase = true) || 
                              (user.email ?: "").contains(searchQuery, ignoreCase = true)
             val matchesRole = roleFilter == null || user.role == roleFilter
-            matchesQuery && matchesRole
+            val matchesStatus = statusFilter == null || user.status == statusFilter
+            matchesQuery && matchesRole && matchesStatus
         }
         
     var isLoading by mutableStateOf(false)
@@ -72,6 +72,7 @@ class SchoolAdminViewModel : ViewModel() {
                 allStudents = allProfiles.filter { it.role == UserRole.STUDENT }
                 allTeachers = allProfiles.filter { it.role == UserRole.TEACHER }
                 allParents = allProfiles.filter { it.role == UserRole.PARENT }
+                pendingUsers = allProfiles.filter { it.status == "pending" }
 
                 allSchedules = try {
                     SupabaseConfig.client.postgrest["schedules"].select().decodeList<Schedule>()
@@ -147,7 +148,7 @@ class SchoolAdminViewModel : ViewModel() {
                 // 3. Delete the schedule
                 SupabaseConfig.client.postgrest["schedules"].delete { filter { eq("id", id) } }
 
-                // 3. Update section/student status if needed
+                // 4. Update section/student status if needed
                 scheduleToDelete?.sectionId?.let { sId ->
                     val otherSchedules = SupabaseConfig.client.postgrest["schedules"]
                         .select { filter { eq("section_id", sId) } }
@@ -442,7 +443,9 @@ class SchoolAdminViewModel : ViewModel() {
         contact: String? = null,
         address: String? = null,
         guardianEmail: String? = null,
-        gradeLevel: String? = null
+        gradeLevel: String? = null,
+        status: String = "active",
+        sectionId: Long? = null
     ) {
         viewModelScope.launch {
             isLoading = true
@@ -475,10 +478,29 @@ class SchoolAdminViewModel : ViewModel() {
                     contact = contact,
                     address = address,
                     guardianEmail = guardianEmail,
-                    gradeLevel = gradeLevel
+                    gradeLevel = gradeLevel,
+                    status = status
                 )
                 
                 SupabaseConfig.client.functions.invoke("rapid-processor", request)
+                
+                // If section was provided for a student, update the profile after creation
+                if (role == UserRole.STUDENT && sectionId != null) {
+                    try {
+                        // The user ID isn't returned by the function directly in a simple way sometimes, 
+                        // so we fetch the user we just created by email
+                        val newUser = SupabaseConfig.client.postgrest["profiles"]
+                            .select { filter { eq("email", email) } }
+                            .decodeSingleOrNull<User>()
+                        
+                        if (newUser != null) {
+                            addStudentToSection(newUser.id, sectionId)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SchoolAdminVM", "Auto-section assignment failed", e)
+                    }
+                }
+
                 successMessage = "User registered successfully"
                 fetchData()
             } catch (e: Exception) {
@@ -586,10 +608,26 @@ class SchoolAdminViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
+                // 1. Update the student's profile
                 SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to sectionId)) {
                     filter { eq("id", studentId) }
                 }
-                successMessage = "Student added to section successfully"
+
+                // 2. Synchronize Enrollments: Enroll student in all schedules associated with this section
+                val sectionSchedules = SupabaseConfig.client.postgrest["schedules"]
+                    .select { filter { eq("section_id", sectionId) } }
+                    .decodeList<Schedule>()
+                
+                if (sectionSchedules.isNotEmpty()) {
+                    val newEnrollments = sectionSchedules.mapNotNull { schedule ->
+                        schedule.id?.let { Enrollment(scheduleId = it, studentId = studentId) }
+                    }
+                    if (newEnrollments.isNotEmpty()) {
+                        SupabaseConfig.client.postgrest["enrollments"].insert(newEnrollments)
+                    }
+                }
+
+                successMessage = "Student added to section and enrolled in classes"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Add student failed", e)
@@ -605,10 +643,35 @@ class SchoolAdminViewModel : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
+                // Find the current section before removing
+                val currentStudent = allUsers.find { it.id == studentId }
+                val sectionId = currentStudent?.sectionId
+
+                // 1. Update the student's profile
                 SupabaseConfig.client.postgrest["profiles"].update(mapOf("section_id" to null)) {
                     filter { eq("id", studentId) }
                 }
-                successMessage = "Student removed from section successfully"
+
+                // 2. Synchronize Enrollments: Remove student from all schedules tied to the section they left
+                if (sectionId != null) {
+                    val sectionSchedules = SupabaseConfig.client.postgrest["schedules"]
+                        .select { filter { eq("section_id", sectionId) } }
+                        .decodeList<Schedule>()
+                    
+                    val scheduleIds = sectionSchedules.mapNotNull { it.id }
+                    if (scheduleIds.isNotEmpty()) {
+                        SupabaseConfig.client.postgrest["enrollments"].delete {
+                            filter {
+                                and {
+                                    eq("student_id", studentId)
+                                    isIn("schedule_id", scheduleIds)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                successMessage = "Student removed from section and related classes"
                 fetchData()
             } catch (e: Exception) {
                 Log.e("SchoolAdminVM", "Remove student failed", e)
@@ -625,28 +688,8 @@ class SchoolAdminViewModel : ViewModel() {
             errorMessage = null
             successMessage = null
             try {
-                // Use a Map for the update to ensure null values (like section_id) are 
-                // explicitly sent to Supabase, bypassing potential null-skipping in serialization.
-                val updates = mutableMapOf<String, Any?>(
-                    "name" to updatedUser.name,
-                    "email" to updatedUser.email,
-                    "contact" to updatedUser.contact,
-                    "address" to updatedUser.address,
-                    "gender" to updatedUser.gender,
-                    "grade_level" to updatedUser.gradeLevel,
-                    "department" to updatedUser.department,
-                    "status" to updatedUser.status,
-                    "section_id" to updatedUser.sectionId,
-                    "guardian_email" to updatedUser.guardianEmail,
-                    "student_id" to updatedUser.studentNo,
-                    "teacher_id" to updatedUser.teacherId,
-                    "parent_id" to updatedUser.parentId,
-                    "child_id" to updatedUser.childId
-                )
-                
-                updatedUser.role?.let { updates["role"] = it.name }
-
-                SupabaseConfig.client.postgrest["profiles"].update(updates) {
+                // Update using the User object directly to avoid 'Any' serialization issues
+                SupabaseConfig.client.postgrest["profiles"].update(updatedUser) {
                     filter { eq("id", updatedUser.id) }
                 }
                 
@@ -655,7 +698,11 @@ class SchoolAdminViewModel : ViewModel() {
                     userProfile = updatedUser
                     successMessage = "Profile updated successfully"
                 } else {
-                    successMessage = "Record for ${updatedUser.name ?: "user"} updated"
+                    successMessage = when(updatedUser.status) {
+                        "active" -> "Account for ${updatedUser.name} has been approved"
+                        "rejected" -> "Account for ${updatedUser.name} has been rejected"
+                        else -> "Record for ${updatedUser.name ?: "user"} updated"
+                    }
                 }
 
                 fetchData()
@@ -666,5 +713,13 @@ class SchoolAdminViewModel : ViewModel() {
                 isLoading = false
             }
         }
+    }
+
+    fun approveUser(user: User) {
+        updateProfile(user.copy(status = "active"))
+    }
+
+    fun rejectUser(user: User) {
+        updateProfile(user.copy(status = "rejected"))
     }
 }

@@ -60,6 +60,11 @@ class LoginViewModel : ViewModel() {
                     }.decodeSingleOrNull<User>()
 
                 if (profile != null) {
+                    if (profile.status == "inactive") {
+                        errorMessage = "Your account is inactive. Please contact the administrator."
+                        SupabaseConfig.client.auth.signOut()
+                        return@launch
+                    }
                     onSuccess(profile.role ?: UserRole.STUDENT)
                 } else {
                     errorMessage = "Profile not found"

@@ -1,8 +1,11 @@
 package com.example.mymy.ui.screens.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -12,15 +15,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
 import com.example.mymy.R
 import com.example.mymy.data.model.UserRole
 import com.example.mymy.ui.components.AuthErrorDialog
@@ -32,9 +38,11 @@ import com.example.mymy.ui.viewmodel.LoginViewModel
 fun LoginScreen(
     viewModel: LoginViewModel = viewModel(),
     onForgotPasswordClick: () -> Unit,
+    onSignUpClick: () -> Unit,
     onLogin: (UserRole) -> Unit
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     // Use AuthErrorDialog instead of simple text
     viewModel.errorMessage?.let { error ->
@@ -111,6 +119,8 @@ fun LoginScreen(
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color.LightGray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DeepGreen,
                         unfocusedBorderColor = Color(0xFFF0F0F0),
@@ -149,6 +159,11 @@ fun LoginScreen(
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { 
+                        focusManager.clearFocus()
+                        viewModel.login(onLogin)
+                    }),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DeepGreen,
                         unfocusedBorderColor = Color(0xFFF0F0F0),
@@ -184,6 +199,20 @@ fun LoginScreen(
                     }
                 }
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Don't have an account?", color = LightText)
+                TextButton(onClick = onSignUpClick) {
+                    Text("Sign Up", color = DeepGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

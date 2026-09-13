@@ -22,7 +22,13 @@ class SignUpViewModel : ViewModel() {
     var password by mutableStateOf("")
     var name by mutableStateOf("")
     var role by mutableStateOf(UserRole.STUDENT)
+    var studentNo by mutableStateOf("")
+    var teacherId by mutableStateOf("")
     var gradeLevel by mutableStateOf("")
+    var contact by mutableStateOf("")
+    var address by mutableStateOf("")
+    var gender by mutableStateOf("")
+    var guardianEmail by mutableStateOf("")
     
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -59,9 +65,14 @@ class SignUpViewModel : ViewModel() {
                     name = name,
                     email = email,
                     role = role,
-                    studentNo = if (role == UserRole.STUDENT) "STD-${UUID.randomUUID().toString().substring(0, 8).uppercase()}" else null,
-                    teacherId = if (role == UserRole.TEACHER) "TCH-${UUID.randomUUID().toString().substring(0, 8).uppercase()}" else null,
-                    gradeLevel = if (role == UserRole.STUDENT) gradeLevel.takeIf { it.isNotBlank() } else null
+                    studentNo = if (role == UserRole.STUDENT) studentNo.ifBlank { "STD-${UUID.randomUUID().toString().substring(0, 8).uppercase()}" } else null,
+                    teacherId = if (role == UserRole.TEACHER) teacherId.ifBlank { "TCH-${UUID.randomUUID().toString().substring(0, 8).uppercase()}" } else null,
+                    gradeLevel = if (role == UserRole.STUDENT) gradeLevel.takeIf { it.isNotBlank() } else null,
+                    contact = contact.takeIf { it.isNotBlank() },
+                    address = address.takeIf { it.isNotBlank() },
+                    gender = gender.takeIf { it.isNotBlank() },
+                    guardianEmail = if (role == UserRole.STUDENT) guardianEmail.takeIf { it.isNotBlank() } else null,
+                    status = "active"
                 )
 
                 SupabaseConfig.client.postgrest["profiles"].insert(newUser)

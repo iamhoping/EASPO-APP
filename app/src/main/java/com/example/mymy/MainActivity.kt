@@ -87,6 +87,7 @@ fun AppNavigation() {
         composable(Screen.Login.route) {
             LoginScreen(
                 onForgotPasswordClick = { navController.navigate(Screen.ForgotPassword.route) },
+                onSignUpClick = { navController.navigate(Screen.SignUp.route) },
                 onLogin = { role ->
                     when (role) {
                         UserRole.STUDENT -> navController.navigate(Screen.StudentDashboard.route)
