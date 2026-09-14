@@ -195,7 +195,7 @@ fun DashboardContent(viewModel: StudentViewModel, onTabChange: (Int) -> Unit) {
                         modifier = Modifier.weight(1f)
                     )
                     StudentStatsCard(
-                        count = "92%",
+                        count = viewModel.overallAttendance,
                         label = "Overall\nAttendance",
                         icon = Icons.Default.ShowChart,
                         modifier = Modifier.weight(1f)
@@ -347,6 +347,8 @@ fun ScheduleList(viewModel: StudentViewModel) {
     CalendarScheduleView(
         schedules = viewModel.scheduleList,
         title = "Class Schedule",
+        userRole = com.example.mymy.data.model.UserRole.STUDENT,
+        teacherNames = viewModel.teachersList.associate { (it.id ?: "") to (it.name ?: "Unknown Teacher") },
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),

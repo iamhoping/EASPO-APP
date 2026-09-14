@@ -202,7 +202,7 @@ fun LoginScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
+            /*Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
@@ -211,7 +211,7 @@ fun LoginScreen(
                 TextButton(onClick = onSignUpClick) {
                     Text("Sign Up", color = DeepGreen, fontWeight = FontWeight.Bold)
                 }
-            }
+            }*/
 
             Spacer(modifier = Modifier.height(16.dp))
         }

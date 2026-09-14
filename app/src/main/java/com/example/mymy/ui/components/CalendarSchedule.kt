@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.model.UserRole
 import com.example.mymy.ui.theme.DeepGreen
 import java.util.Calendar
 import java.util.Locale
@@ -30,7 +31,10 @@ fun CalendarScheduleView(
     schedules: List<Schedule>,
     title: String = "Schedule",
     onBackClick: (() -> Unit)? = null,
-    userImage: @Composable (() -> Unit)? = null
+    userImage: @Composable (() -> Unit)? = null,
+    userRole: UserRole = UserRole.STUDENT,
+    teacherNames: Map<String, String> = emptyMap(),
+    sectionNames: Map<Long, String> = emptyMap()
 ) {
     // Calculate dates for the current week starting from Monday
     val calendar = remember { Calendar.getInstance() }
@@ -205,7 +209,10 @@ fun CalendarScheduleView(
                        isWeekView = viewMode == "Week",
                        columnWidth = columnWidth,
                        gridWidth = gridWidth,
-                       modifier = Modifier.padding(top = 24.dp)
+                       modifier = Modifier.padding(top = 24.dp),
+                       userRole = userRole,
+                       teacherNames = teacherNames,
+                       sectionNames = sectionNames
                    )
                 }
             }
@@ -273,7 +280,10 @@ fun ScheduleGridItem(
     isWeekView: Boolean,
     modifier: Modifier = Modifier,
     columnWidth: Dp = 60.dp,
-    gridWidth: Dp = 300.dp
+    gridWidth: Dp = 300.dp,
+    userRole: UserRole = UserRole.STUDENT,
+    teacherNames: Map<String, String> = emptyMap(),
+    sectionNames: Map<Long, String> = emptyMap()
 ) {
     // Use start_time/end_time if available
     fun parseTime(schedule: Schedule): Pair<Float, Float> {
@@ -301,10 +311,45 @@ fun ScheduleGridItem(
     var showConflictDialog by remember { mutableStateOf(false) }
 
     if (showConflictDialog) {
+        val displayTime = remember(schedule.startTime, schedule.endTime) {
+            fun format(time: String?): String {
+                if (time == null) return "--:--"
+                val p = time.split(":")
+                if (p.size < 2) return time
+                var h = p[0].toIntOrNull() ?: 0
+                val m = p[1].toIntOrNull() ?: 0
+                val ampm = if (h >= 12) "PM" else "AM"
+                if (h > 12) h -= 12
+                if (h == 0) h = 12
+                return "%d:%02d %s".format(h, m, ampm)
+            }
+            "${format(schedule.startTime)} – ${format(schedule.endTime)}"
+        }
+
+        val teacherName = schedule.teacherId?.let { teacherNames[it] } ?: "Not assigned"
+        val sectionName = schedule.sectionId?.let { sectionNames[it] } ?: "Not assigned"
+        val dayName = schedule.day.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+
+        val message = when (userRole) {
+            UserRole.TEACHER -> {
+                "• Section: $sectionName\n" +
+                "• Day: $dayName\n" +
+                "• Time: $displayTime\n" +
+                "• Room: ${schedule.room.ifEmpty { "Not assigned" }}\n" +
+                "• Subject: ${schedule.subject ?: "Not assigned"}"
+            }
+            else -> { // Default to STUDENT display
+                "• Time: $displayTime\n" +
+                "• Room: ${schedule.room.ifEmpty { "Not assigned" }}\n" +
+                "• Subject: ${schedule.subject ?: "Not assigned"}\n" +
+                "• Assigned Teacher: $teacherName"
+            }
+        }
+
         ElegantDialog(
             onDismiss = { showConflictDialog = false },
-            title = "Schedule Detail",
-            message = "${schedule.subject}\nRoom: ${schedule.room}\nTime: ${schedule.startTime} - ${schedule.endTime}",
+            title = dayName,
+            message = message,
             type = DialogType.INFO,
             icon = Icons.Default.EventNote,
             confirmButtonText = "OK",

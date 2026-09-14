@@ -35,6 +35,23 @@ class StudentViewModel : ViewModel() {
     val attendanceBySchedule: Map<Long, List<Attendance>>
         get() = attendanceList.groupBy { it.scheduleId ?: -1L }
 
+    val overallAttendance: String
+        get() {
+            if (attendanceList.isEmpty()) return "0%"
+            // Filter records to count each day only once if multiple records exist per day (e.g. per subject)
+            // or just count all records. Usually "Overall Attendance" in student dashboards refers to 
+            // the percentage of "Present/Late" records vs total scheduled records.
+            val validRecords = attendanceList.filter { it.status != "Scheduled" } // exclude placeholders if any
+            if (validRecords.isEmpty()) return "0%"
+            
+            val presentCount = validRecords.count { 
+                it.status.equals("Present", ignoreCase = true) || 
+                it.status.equals("Late", ignoreCase = true) 
+            }
+            val percentage = (presentCount.toDouble() / validRecords.size) * 100
+            return "${percentage.toInt()}%"
+        }
+
     fun fetchData() {
         val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id ?: return
         android.util.Log.d("StudentVM", "fetchData started for userId: $userId")

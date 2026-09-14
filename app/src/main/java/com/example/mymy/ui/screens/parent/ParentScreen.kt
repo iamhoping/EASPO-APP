@@ -437,6 +437,8 @@ fun ChildScheduleList(viewModel: ParentViewModel) {
     CalendarScheduleView(
         schedules = viewModel.childSchedule,
         title = "Child's Schedule",
+        userRole = com.example.mymy.data.model.UserRole.STUDENT,
+        teacherNames = viewModel.teachersList.associate { (it.id ?: "") to (it.name ?: "Unknown Teacher") },
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),

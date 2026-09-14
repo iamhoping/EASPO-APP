@@ -397,6 +397,8 @@ fun TeacherSchedule(viewModel: TeacherViewModel) {
     CalendarScheduleView(
         schedules = viewModel.scheduleList,
         title = "Class Schedule",
+        userRole = com.example.mymy.data.model.UserRole.TEACHER,
+        sectionNames = viewModel.sections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") },
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),

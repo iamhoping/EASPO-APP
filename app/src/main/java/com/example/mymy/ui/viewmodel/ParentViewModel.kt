@@ -23,6 +23,7 @@ class ParentViewModel : ViewModel() {
     var childAttendance by mutableStateOf<List<Attendance>>(emptyList())
     var childGrades by mutableStateOf<List<Grade>>(emptyList())
     var childSchedule by mutableStateOf<List<Schedule>>(emptyList())
+    var teachersList by mutableStateOf<List<User>>(emptyList())
 
     var attendanceRate by mutableStateOf(0)
     var averageGrade by mutableStateOf(0.0)
@@ -268,6 +269,14 @@ class ParentViewModel : ViewModel() {
         averageGrade = if (childGrades.isNotEmpty()) {
             childGrades.map { it.score }.average()
         } else 0.0
+
+        // Fetch Teachers for Schedule
+        teachersList = try {
+            SupabaseConfig.client.postgrest["profiles"]
+                .select {
+                    filter { eq("role", "TEACHER") }
+                }.decodeList<User>()
+        } catch (e: Exception) { emptyList() }
         
         Log.d("ParentVM", "Sync Complete: Att=${childAttendance.size}, Grades=${childGrades.size}, Sched=${childSchedule.size}")
     }
