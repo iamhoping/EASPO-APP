@@ -64,12 +64,7 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Back Button
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopStart) {
-                IconButton(onClick = { /* Handle Back */ }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DarkText)
-                }
-            }
+
             
             Spacer(modifier = Modifier.weight(0.1f))
 
