@@ -2267,7 +2267,7 @@ fun ManageScheduleDialog(
 
                 ExposedDropdownMenuBox(expanded = sectionExpanded, onExpandedChange = { sectionExpanded = it }) {
                     OutlinedTextField(
-                        value = sections.find { it.id == selectedSectionId }?.name ?: "Assign Section (Optional)",
+                        value = sections.find { it.id == selectedSectionId }?.name ?: "Assign Section",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Section") },
