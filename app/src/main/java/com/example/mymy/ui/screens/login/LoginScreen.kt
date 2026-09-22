@@ -100,7 +100,7 @@ fun LoginScreen(
             // Email Field
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "EMAIL OR STUDENT ID",
+                    "EMAIL",
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = DeepGreen
