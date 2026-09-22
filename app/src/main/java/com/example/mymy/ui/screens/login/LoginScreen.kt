@@ -110,7 +110,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = viewModel.email,
                     onValueChange = { viewModel.email = it },
-                    placeholder = { Text("Enter your email or ID", color = Color.LightGray) },
+                    placeholder = { Text("Enter your email", color = Color.LightGray) },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color.LightGray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
