@@ -72,13 +72,12 @@ fun LoginScreen(
             androidx.compose.foundation.Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Logo",
-                modifier = Modifier.size(120.dp)
+                modifier = Modifier.size(200.dp)
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Welcome\nto EASPO",
+                text = "EASTERN PORAC NATIONAL HIGH SCHOOL",
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     color = DeepGreen,
@@ -95,7 +94,7 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(35.dp))
 
             // Email Field
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -174,7 +173,7 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(0.2f))
+            Spacer(modifier = Modifier.weight(0.10f))
 
             if (viewModel.isLoading) {
                 CircularProgressIndicator(color = DeepGreen)
