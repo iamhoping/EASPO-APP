@@ -255,6 +255,7 @@ fun SchoolAdminScreen(
     var userToApprove by remember { mutableStateOf<User?>(null) }
     var userToReject by remember { mutableStateOf<User?>(null) }
     var viewingSection by remember { mutableStateOf<Section?>(null) }
+    var gradeFilterForSections by remember { mutableStateOf<String?>(null) }
     var studentToRemoveFromSection by remember { mutableStateOf<User?>(null) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
 
@@ -335,7 +336,11 @@ fun SchoolAdminScreen(
                         icon = { Icon(Icons.Default.Class, "Sections") },
                         label = { Text("Sections") },
                         selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
+                        onClick = { 
+                            selectedTab = 3 
+                            viewingSection = null
+                            gradeFilterForSections = null
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.White,
                             unselectedIconColor = Color.White.copy(alpha = 0.6f),
@@ -458,16 +463,24 @@ fun SchoolAdminScreen(
                         showScheduleDialog = true
                     })
                     3 -> {
-                        if (viewingSection == null) {
-                            SectionList(
+                        if (gradeFilterForSections == null) {
+                            GradeLevelSelection(
                                 sections = sections,
+                                onGradeClick = { gradeFilterForSections = it }
+                            )
+                        } else if (viewingSection == null) {
+                            val sectionsInGrade = sections.filter { it.gradeLevel == gradeFilterForSections }
+                            AdminAssignedSectionsScreen(
+                                gradeLevel = gradeFilterForSections!!,
+                                sections = sectionsInGrade,
                                 users = users,
                                 onSectionClick = { viewingSection = it },
                                 onDeleteSection = { sectionToDelete = it },
                                 onCreateSection = {
-                                    editingSection = Section(name = "", gradeLevel = "7")
+                                    editingSection = Section(name = "", gradeLevel = gradeFilterForSections!!)
                                     showSectionDialog = true
-                                }
+                                },
+                                onBack = { gradeFilterForSections = null }
                             )
                         } else {
                             SectionDetailView(
@@ -1146,12 +1159,103 @@ fun AdminScheduleList(
 }
 
 @Composable
-fun SectionList(
+fun GradeLevelSelection(
+    sections: List<Section>,
+    onGradeClick: (String) -> Unit
+) {
+    val gradeLevels = remember(sections) {
+        sections.map { it.gradeLevel }.distinct().sortedBy { it.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                Column {
+                    Text("Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Select a grade level to view sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        if (gradeLevels.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(64.dp), tint = LightGreen)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No sections created yet", color = LightText)
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(vertical = 24.dp)
+            ) {
+                items(gradeLevels) { grade ->
+                    val sectionCount = sections.count { it.gradeLevel == grade }
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onGradeClick(grade) },
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0)),
+                        shadowElevation = 2.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(60.dp),
+                                color = LightGreen.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.School, null, tint = DeepGreen, modifier = Modifier.padding(16.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(20.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Grade $grade",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DeepGreen
+                                )
+                                Text(
+                                    "$sectionCount Sections",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LightText
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                null,
+                                tint = DeepGreen.copy(alpha = 0.5f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminAssignedSectionsScreen(
+    gradeLevel: String,
     sections: List<Section>,
     users: List<User>,
     onSectionClick: (Section) -> Unit,
     onDeleteSection: (Section) -> Unit,
-    onCreateSection: () -> Unit
+    onCreateSection: () -> Unit,
+    onBack: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -1160,9 +1264,12 @@ fun SectionList(
                 color = DeepGreen,
                 shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
             ) {
-                Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    Column {
-                        Text("Section Management", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Box(modifier = Modifier.padding(24.dp).fillMaxSize()) {
+                    IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    }
+                    Column(modifier = Modifier.align(Alignment.CenterStart).padding(top = 32.dp)) {
+                        Text("Grade $gradeLevel Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         Text("${sections.size} Active Sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -1175,26 +1282,42 @@ fun SectionList(
             ) {
                 items(sections) { section ->
                     val studentCount = users.count { it.sectionId == section.id }
-                    Card(
+                    Surface(
                         modifier = Modifier.fillMaxWidth().clickable { onSectionClick(section) },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White,
+                        shadowElevation = 2.dp,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(20.dp).fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(section.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DeepGreen)
-                                Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                            Surface(
+                                modifier = Modifier.size(60.dp),
+                                color = LightGreen,
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Icon(Icons.Default.Class, null, tint = DeepGreen, modifier = Modifier.padding(16.dp))
                             }
+                            
+                            Spacer(modifier = Modifier.width(20.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    section.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DeepGreen
+                                )
+                                Text("Grade ${section.gradeLevel} • $studentCount Students", color = LightText, style = MaterialTheme.typography.bodySmall)
+                            }
+                            
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = { onDeleteSection(section) }) {
                                     Icon(Icons.Default.Delete, "Delete", tint = ErrorColor.copy(alpha = 0.7f))
                                 }
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen)
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen.copy(alpha = 0.5f))
                             }
                         }
                     }
@@ -1206,7 +1329,7 @@ fun SectionList(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.Class, null, modifier = Modifier.size(48.dp), tint = LightGreen)
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("No sections created yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                                Text("No sections created for Grade $gradeLevel yet.", color = LightText, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }

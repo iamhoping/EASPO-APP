@@ -413,29 +413,44 @@ fun TeacherSchedule(viewModel: TeacherViewModel) {
 
 @Composable
 fun StudentManagementFlow(viewModel: TeacherViewModel) {
+    var selectedGrade by remember { mutableStateOf<String?>(null) }
     var selectedSection by remember { mutableStateOf<com.example.mymy.data.model.Section?>(null) }
     
-    if (selectedSection == null) {
-        AssignedSectionsScreen(
-            sections = viewModel.sections,
-            students = viewModel.students,
-            onSectionClick = { selectedSection = it }
-        )
-    } else {
-        SectionStudentsScreen(
-            section = selectedSection!!,
-            viewModel = viewModel,
-            onBack = { selectedSection = null }
-        )
+    when {
+        selectedSection != null -> {
+            SectionStudentsScreen(
+                section = selectedSection!!,
+                viewModel = viewModel,
+                onBack = { selectedSection = null }
+            )
+        }
+        selectedGrade != null -> {
+            AssignedSectionsScreen(
+                gradeLevel = selectedGrade,
+                sections = viewModel.sections.filter { it.gradeLevel == selectedGrade },
+                students = viewModel.students,
+                onSectionClick = { selectedSection = it },
+                onBack = { selectedGrade = null }
+            )
+        }
+        else -> {
+            GradeLevelListScreen(
+                sections = viewModel.sections,
+                onGradeClick = { selectedGrade = it }
+            )
+        }
     }
 }
 
 @Composable
-fun AssignedSectionsScreen(
+fun GradeLevelListScreen(
     sections: List<com.example.mymy.data.model.Section>,
-    students: List<User>,
-    onSectionClick: (com.example.mymy.data.model.Section) -> Unit
+    onGradeClick: (String) -> Unit
 ) {
+    val gradeLevels = remember(sections) {
+        sections.map { it.gradeLevel }.distinct().sortedBy { it.filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(140.dp),
@@ -444,7 +459,90 @@ fun AssignedSectionsScreen(
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                 Column {
-                    Text("My Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Select a grade level to view sections", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        if (gradeLevels.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.FolderOpen, null, modifier = Modifier.size(64.dp), tint = LightGreen)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No sections assigned yet", color = LightText)
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                items(gradeLevels) { grade ->
+                    GradeLevelCard(grade = grade, onClick = { onGradeClick(grade) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GradeLevelCard(grade: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White,
+        shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+    ) {
+        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(60.dp),
+                color = LightGreen.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.School, null, tint = DeepGreen, modifier = Modifier.padding(16.dp))
+            }
+            
+            Spacer(modifier = Modifier.width(20.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Grade $grade",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = DeepGreen
+                )
+            }
+            
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = DeepGreen.copy(alpha = 0.5f))
+        }
+    }
+}
+
+@Composable
+fun AssignedSectionsScreen(
+    gradeLevel: String? = null,
+    sections: List<com.example.mymy.data.model.Section>,
+    students: List<User>,
+    onSectionClick: (com.example.mymy.data.model.Section) -> Unit,
+    onBack: (() -> Unit)? = null
+) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(140.dp),
+            color = DeepGreen,
+            shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
+        ) {
+            Box(modifier = Modifier.padding(24.dp).fillMaxSize()) {
+                if (onBack != null) {
+                    IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    }
+                }
+                Column(modifier = Modifier.align(Alignment.CenterStart).padding(top = if (onBack != null) 32.dp else 0.dp)) {
+                    Text(if (gradeLevel != null) "Grade $gradeLevel Sections" else "My Sections", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("Select a section to manage students", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -530,11 +628,11 @@ fun SectionStudentsScreen(
     val filteredStudents = sectionStudents.filter {
         (it.name ?: "").contains(searchQuery, ignoreCase = true) || 
         (it.studentNo ?: "").contains(searchQuery, ignoreCase = true)
-    }
+    }.sortedBy { it.name }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
         Surface(
-            modifier = Modifier.fillMaxWidth().height(120.dp),
+            modifier = Modifier.fillMaxWidth().height(140.dp),
             color = DeepGreen,
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
@@ -546,53 +644,77 @@ fun SectionStudentsScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                 }
                 Column {
+                    Text(
+                        text = "Grade ${section.gradeLevel} > Sections",
+                        color = Color.White.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
                     Text(section.name, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("${section.gradeLevel} • ${sectionStudents.size} Students", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                    Text("${sectionStudents.size} Students Enrolled", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
 
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search student name or ID") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color(0xFFF0F0F0))
+                placeholder = { Text("Search by name or ID...") },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = DeepGreen) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, null)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = DeepGreen,
+                    unfocusedBorderColor = Color(0xFFE0E0E0),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                )
             )
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Quarter Selector
             Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
+                Surface(
                     onClick = { expandedQuarter = true },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepGreen)
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (viewModel.selectedQuarter.isEmpty()) "Select Quarter" else viewModel.selectedQuarter,
-                            color = if (viewModel.selectedQuarter.isEmpty()) LightText else DeepGreen
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CalendarToday, null, tint = DeepGreen, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = if (viewModel.selectedQuarter.isEmpty()) "Select Quarter" else viewModel.selectedQuarter,
+                                color = if (viewModel.selectedQuarter.isEmpty()) LightText else DeepGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen)
                     }
                 }
                 DropdownMenu(
                     expanded = expandedQuarter,
                     onDismissRequest = { expandedQuarter = false },
-                    modifier = Modifier.fillMaxWidth(0.8f)
+                    modifier = Modifier.fillMaxWidth(0.85f).background(Color.White)
                 ) {
                     quarters.forEach { quarter ->
                         DropdownMenuItem(
-                            text = { Text(quarter) },
+                            text = { Text(quarter, fontWeight = FontWeight.Medium) },
                             onClick = {
                                 viewModel.selectedQuarter = quarter
                                 expandedQuarter = false
@@ -604,10 +726,19 @@ fun SectionStudentsScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            Text("STUDENT LIST", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+            Text(
+                "CLASS LIST", 
+                style = MaterialTheme.typography.labelLarge, 
+                fontWeight = FontWeight.ExtraBold, 
+                color = DeepGreen,
+                letterSpacing = 1.sp
+            )
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
                 items(filteredStudents) { student ->
                     StudentGradeRow(
                         student = student,
@@ -621,8 +752,15 @@ fun SectionStudentsScreen(
                 
                 if (filteredStudents.isEmpty()) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                            Text("No students found", color = LightText)
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(40.dp), 
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.PersonSearch, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("No students found", color = LightText, fontWeight = FontWeight.Medium)
+                            }
                         }
                     }
                 }
@@ -648,36 +786,78 @@ fun StudentGradeRow(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         color = Color.White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0)),
+        shadowElevation = 2.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(modifier = Modifier.size(40.dp), color = LightGreen, shape = RoundedCornerShape(10.dp)) {
-                    Icon(Icons.Default.Person, null, tint = DeepGreen, modifier = Modifier.padding(8.dp))
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    color = LightGreen.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        null,
+                        tint = DeepGreen,
+                        modifier = Modifier.padding(10.dp)
+                    )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
-                    Text("ID: ${student.studentNo ?: "N/A"}", style = MaterialTheme.typography.bodySmall, color = LightText)
+                    Text(
+                        student.name ?: "Unknown",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = DeepGreen
+                    )
+                    Text(
+                        "ID: ${student.studentNo ?: "N/A"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LightText
+                    )
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 // Subject Dropdown
-                Box(modifier = Modifier.weight(1.2f)) {
-                    OutlinedButton(
+                Box(modifier = Modifier.weight(1.3f)) {
+                    Surface(
                         onClick = { showSubjectMenu = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF8FBFB),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
                     ) {
-                        Text(selectedSubject, maxLines = 1, fontSize = 12.sp, color = DeepGreen)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                selectedSubject,
+                                maxLines = 1,
+                                fontSize = 12.sp,
+                                color = DeepGreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen, modifier = Modifier.size(18.dp))
+                        }
                     }
-                    DropdownMenu(expanded = showSubjectMenu, onDismissRequest = { showSubjectMenu = false }) {
+                    DropdownMenu(
+                        expanded = showSubjectMenu,
+                        onDismissRequest = { showSubjectMenu = false },
+                        modifier = Modifier.background(Color.White)
+                    ) {
                         subjects.forEach { subj ->
-                            DropdownMenuItem(text = { Text(subj) }, onClick = { selectedSubject = subj; showSubjectMenu = false })
+                            DropdownMenuItem(
+                                text = { Text(subj, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = { selectedSubject = subj; showSubjectMenu = false }
+                            )
                         }
                     }
                 }
@@ -686,42 +866,78 @@ fun StudentGradeRow(
                 OutlinedTextField(
                     value = score,
                     onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) score = it },
-                    modifier = Modifier.weight(0.8f),
+                    modifier = Modifier.weight(0.9f).height(48.dp),
                     placeholder = { Text("0-100", fontSize = 12.sp) },
                     singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    shape = RoundedCornerShape(10.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DeepGreen,
+                        unfocusedBorderColor = Color(0xFFE0E0E0),
+                        unfocusedContainerColor = Color(0xFFF8FBFB),
+                        focusedContainerColor = Color(0xFFF8FBFB)
+                    )
                 )
 
                 // Remarks Dropdown
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedButton(
+                Box(modifier = Modifier.weight(1.1f)) {
+                    Surface(
                         onClick = { showMenu = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF8FBFB),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
                     ) {
-                        Text(selectedRemark, fontSize = 12.sp, color = DeepGreen)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val remarkColor = when(selectedRemark) {
+                                "Passed" -> Color(0xFF43A047)
+                                "Failed" -> Color(0xFFE53935)
+                                else -> DeepGreen
+                            }
+                            Text(
+                                selectedRemark,
+                                fontSize = 12.sp,
+                                color = remarkColor,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.ArrowDropDown, null, tint = DeepGreen, modifier = Modifier.size(18.dp))
+                        }
                     }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(Color.White)
+                    ) {
                         listOf("Passed", "Failed", "Incomplete").forEach { remark ->
-                            DropdownMenuItem(text = { Text(remark) }, onClick = { selectedRemark = remark; showMenu = false })
+                            DropdownMenuItem(
+                                text = { Text(remark, style = MaterialTheme.typography.bodyMedium) },
+                                onClick = { selectedRemark = remark; showMenu = false }
+                            )
                         }
                     }
                 }
 
-                    IconButton(
-                        onClick = { 
-                            val s = score.toDoubleOrNull()
-                            if (s != null && s in 0.0..100.0) {
-                                onSaveGrade(selectedSubject, s, selectedRemark)
-                            }
-                        },
-                        enabled = selectedQuarter.isNotEmpty(),
-                        modifier = Modifier.size(40.dp).background(if (selectedQuarter.isNotEmpty()) DeepGreen else Color.Gray, RoundedCornerShape(8.dp))
-                    ) {
-                        Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
+                IconButton(
+                    onClick = { 
+                        val s = score.toDoubleOrNull()
+                        if (s != null && s in 0.0..100.0) {
+                            onSaveGrade(selectedSubject, s, selectedRemark)
+                        }
+                    },
+                    enabled = selectedQuarter.isNotEmpty(),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            if (selectedQuarter.isNotEmpty()) DeepGreen else Color.Gray.copy(alpha = 0.3f),
+                            RoundedCornerShape(10.dp)
+                        )
+                ) {
+                    Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
             }
         }
     }
