@@ -59,68 +59,70 @@ fun ParentScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            Surface(
-                tonalElevation = 8.dp,
-                shadowElevation = 16.dp,
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                color = DeepGreen
-            ) {
-                NavigationBar(
-                    containerColor = Color.Transparent,
-                    modifier = Modifier.height(80.dp)
+            if (viewModel.children.isNotEmpty()) {
+                Surface(
+                    tonalElevation = 8.dp,
+                    shadowElevation = 16.dp,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    color = DeepGreen
                 ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Home, "Overview") },
-                        label = { Text("Home") },
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                            indicatorColor = SageGreen,
-                            selectedTextColor = Color.White,
-                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        modifier = Modifier.height(80.dp)
+                    ) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Home, "Overview") },
+                            label = { Text("Home") },
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                indicatorColor = SageGreen,
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                            )
                         )
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Schedule, "Schedule") },
-                        label = { Text("Schedule") },
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                            indicatorColor = SageGreen,
-                            selectedTextColor = Color.White,
-                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Schedule, "Schedule") },
+                            label = { Text("Schedule") },
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                indicatorColor = SageGreen,
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                            )
                         )
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Grade, "Grades") },
-                        label = { Text("Grades") },
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                            indicatorColor = SageGreen,
-                            selectedTextColor = Color.White,
-                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Grade, "Grades") },
+                            label = { Text("Grades") },
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                indicatorColor = SageGreen,
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                            )
                         )
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.FactCheck, "Attendance") },
-                        label = { Text("Attendance") },
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                            indicatorColor = SageGreen,
-                            selectedTextColor = Color.White,
-                            unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.FactCheck, "Attendance") },
+                            label = { Text("Attendance") },
+                            selected = selectedTab == 3,
+                            onClick = { selectedTab = 3 },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color.White,
+                                unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                                indicatorColor = SageGreen,
+                                selectedTextColor = Color.White,
+                                unselectedTextColor = Color.White.copy(alpha = 0.6f)
+                            )
                         )
-                    )
+                    }
                 }
             }
         },
@@ -171,68 +173,27 @@ fun ParentScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                         
                         Text(
-                            "No children linked to your account.",
+                            "No children linked to your account",
                             color = DarkText,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         
                         Text(
-                            "No linked student found. Please contact the school administrator to verify your guardian email.",
+                            "Please contact the school administrator to verify your guardian email.",
                             color = LightText,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
+                            modifier = Modifier.padding(top = 8.dp, bottom = 48.dp)
                         )
-
-                        OutlinedTextField(
-                            value = studentIdToLink,
-                            onValueChange = { if (it.length <= 15) studentIdToLink = it.uppercase() },
-                            label = { Text("Student ID (e.g. STD-XXXX)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = SageGreen,
-                                focusedLabelColor = SageGreen
-                            ),
-                            leadingIcon = { Icon(Icons.Default.Fingerprint, null, tint = SageGreen) }
-                        )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Button(
-                            onClick = { 
-                                if (studentIdToLink.isNotBlank()) {
-                                    viewModel.linkStudent(studentIdToLink)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
-                            shape = RoundedCornerShape(16.dp),
-                            enabled = studentIdToLink.isNotBlank() && !viewModel.isLoading
-                        ) {
-                            if (viewModel.isLoading) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                            } else {
-                                Text("Connect Student", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        TextButton(onClick = { viewModel.fetchChildren() }) {
-                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Refresh List", color = SageGreen)
-                        }
-
-                        Spacer(modifier = Modifier.weight(1f))
 
                         TextButton(
-                            onClick = onLogout
+                            onClick = onLogout,
+                            colors = ButtonDefaults.textButtonColors(contentColor = ErrorColor)
                         ) {
-                            Text("Sign Out", color = LightText)
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sign Out")
                         }
                     }
                 }
