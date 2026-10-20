@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
@@ -363,6 +364,18 @@ fun ScheduleList(viewModel: StudentViewModel) {
 
 @Composable
 fun GradesList(viewModel: StudentViewModel) {
+    var selectedSubject by remember { mutableStateOf<String?>(null) }
+    
+    // Group grades by subject for navigation
+    val gradesBySubject = remember(viewModel.gradesList) {
+        viewModel.gradesList.groupBy { it.subject }
+    }
+    
+    // Get unique subjects from both grades and schedule (to show subjects even without grades)
+    val allSubjects = remember(viewModel.gradesList, viewModel.scheduleList) {
+        (viewModel.gradesList.map { it.subject } + viewModel.scheduleList.mapNotNull { it.subject }).distinct().sorted()
+    }
+
     Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
         // Curved Header
         Surface(
@@ -371,94 +384,122 @@ fun GradesList(viewModel: StudentViewModel) {
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
             Box(modifier = Modifier.padding(24.dp).fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                Column {
-                    Text("My Grades", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Academic performance records", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedSubject != null) {
+                        IconButton(onClick = { selectedSubject = null }, modifier = Modifier.padding(end = 8.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                        }
+                    }
+                    Column {
+                        Text(
+                            if (selectedSubject == null) "My Grades" else selectedSubject!!,
+                            color = Color.White,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (selectedSubject == null) "Academic performance records" else "Quarterly Evaluation",
+                            color = Color.White.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
 
         Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-            Text("ACADEMIC OVERVIEW", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
-            Spacer(modifier = Modifier.height(16.dp))
+            if (selectedSubject == null) {
+                Text("ENROLLED SUBJECTS", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // Average Card
-            val average = if (viewModel.gradesList.isNotEmpty()) viewModel.gradesList.map { it.score }.average() else 0.0
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(100.dp),
-                color = DeepGreen,
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Row(modifier = Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text("Current Average", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
-                        Text("%.2f".format(average), color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                if (allSubjects.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.MenuBook, null, modifier = Modifier.size(48.dp), tint = LightGreen)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No subjects found.", color = LightText, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
-                    Icon(Icons.Default.TrendingUp, null, tint = SageGreen, modifier = Modifier.size(40.dp))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(viewModel.gradesList) { grade ->
-                    val teacher = viewModel.teachersList.find { it.id == grade.teacherId || (it.teacherId != null && it.teacherId == grade.teacherId) }
-                    val isPassed = grade.score >= 75.0 // Assuming 75 is passing
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
-                    ) {
-                        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(allSubjects) { subject ->
                             Surface(
-                                modifier = Modifier.size(48.dp),
-                                color = if (isPassed) LightGreen else ErrorColor.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(12.dp)
+                                onClick = { selectedSubject = subject },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color.White,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0)),
+                                shadowElevation = 2.dp
                             ) {
-                                Icon(
-                                    if (isPassed) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                    null,
-                                    tint = if (isPassed) DeepGreen else ErrorColor,
-                                    modifier = Modifier.padding(12.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(grade.subject ?: "No Subject", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DeepGreen)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Prof. ${teacher?.name ?: "Faculty"}", style = MaterialTheme.typography.bodySmall, color = LightText)
-                                    grade.createdAt?.let { dateStr ->
-                                        Text(" • ", color = LightText)
-                                        // Simple date extraction from ISO format
-                                        val displayDate = dateStr.take(10)
-                                        Text(displayDate, style = MaterialTheme.typography.bodySmall, color = LightText)
+                                Row(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            modifier = Modifier.size(40.dp),
+                                            color = LightGreen,
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(Icons.Default.MenuBook, null, tint = DeepGreen, modifier = Modifier.padding(8.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Text(subject, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DeepGreen)
                                     }
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = SageGreen)
                                 }
-                                Text(grade.remarks ?: (if (isPassed) "Passed" else "Failed"), 
-                                    style = MaterialTheme.typography.labelSmall, 
-                                    color = if (isPassed) DeepGreen else ErrorColor,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
-                            Text(
-                                "%.1f".format(grade.score),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = DeepGreen
-                            )
                         }
                     }
                 }
-                
-                if (viewModel.gradesList.isEmpty()) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.HistoryEdu, null, modifier = Modifier.size(48.dp), tint = LightGreen)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("No grades published yet", color = LightText, style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Text("QUARTERLY GRADES", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val subjectGrades = gradesBySubject[selectedSubject] ?: emptyList()
+                val quarters = listOf("1st Quarter", "2nd Quarter", "3rd Quarter", "4th Quarter")
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(quarters) { quarter ->
+                        val grade = subjectGrades.find { it.quarter?.contains(quarter.take(1)) == true || it.quarter == quarter }
+                        
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF0F0F0))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(quarter, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DeepGreen)
+                                    if (grade != null) {
+                                        Text(grade.remarks ?: "Academic evaluation", style = MaterialTheme.typography.bodySmall, color = LightText)
+                                    } else {
+                                        Text("Not yet graded", style = MaterialTheme.typography.bodySmall, color = LightText.copy(alpha = 0.6f))
+                                    }
+                                }
+                                
+                                if (grade != null) {
+                                    Surface(
+                                        color = if (grade.score >= 75) LightGreen else ErrorColor.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            "%.1f".format(grade.score),
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (grade.score >= 75) DeepGreen else ErrorColor
+                                        )
+                                    }
+                                } else {
+                                    Text("N/A", style = MaterialTheme.typography.titleMedium, color = LightText.copy(alpha = 0.4f))
+                                }
                             }
                         }
                     }

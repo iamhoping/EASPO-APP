@@ -93,18 +93,38 @@ class ParentViewModel : ViewModel() {
             }
         } else null
 
-        val matchedByGuardianEmail = if (linkedChildren.isEmpty() && specificChild == null && parentProfile?.email != null) {
+        val matchedByGuardianEmail = if (parentProfile?.email != null) {
             try {
-                SupabaseConfig.client.postgrest["profiles"]
+                val email = parentProfile.email.trim().lowercase()
+                val students = SupabaseConfig.client.postgrest["profiles"]
                     .select {
                         filter { 
                             and {
                                 eq("role", "STUDENT")
-                                eq("guardian_email", parentProfile.email)
+                                ilike("guardian_email", email)
                             }
                         }
                     }.decodeList<User>()
-            } catch (e: Exception) { emptyList() }
+                
+                // Automatically establish the parent_id link in the DB if not already linked
+                students.forEach { student ->
+                    if (student.parentId != userId) {
+                        try {
+                            SupabaseConfig.client.postgrest["profiles"].update(
+                                mapOf("parent_id" to userId)
+                            ) {
+                                filter { eq("id", student.id) }
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ParentVM", "Failed to auto-link student ${student.id}", e)
+                        }
+                    }
+                }
+                students
+            } catch (e: Exception) { 
+                Log.e("ParentVM", "Error matching by guardian email", e)
+                emptyList() 
+            }
         } else emptyList()
 
         val allChildren = (linkedChildren + listOfNotNull(specificChild) + matchedByGuardianEmail).distinctBy { it.id }

@@ -178,7 +178,7 @@ fun ParentScreen(
                         )
                         
                         Text(
-                            "Enter a Student ID to start monitoring their academic progress, attendance, and schedules.",
+                            "No linked student found. Please contact the school administrator to verify your guardian email.",
                             color = LightText,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -327,6 +327,34 @@ fun ParentDashboardOverview(
             }
 
             item {
+                val selectedChild = viewModel.children.find { it.id == viewModel.selectedChildId }
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceColor),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            "STUDENT INFORMATION",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = DeepGreen
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        StudentInfoRow(label = "Full Name", value = selectedChild?.name ?: "N/A")
+                        StudentInfoRow(label = "Student ID / LRN", value = selectedChild?.studentNo ?: "N/A")
+                        StudentInfoRow(label = "Grade Level", value = selectedChild?.gradeLevel ?: "N/A")
+                        StudentInfoRow(label = "Guardian Email", value = selectedChild?.guardianEmail ?: "N/A")
+                        StudentInfoRow(label = "Contact", value = selectedChild?.contact ?: "N/A")
+                        StudentInfoRow(label = "Status", value = selectedChild?.status ?: "Active")
+                    }
+                }
+            }
+
+            item {
                 val attendanceRate = viewModel.attendanceRate
                 val averageGrade = viewModel.averageGrade
 
@@ -411,6 +439,17 @@ fun ParentDashboardOverview(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun StudentInfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = LightText, style = MaterialTheme.typography.bodySmall)
+        Text(value, color = DarkText, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
