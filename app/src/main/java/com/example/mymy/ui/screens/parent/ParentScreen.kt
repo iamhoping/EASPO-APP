@@ -23,7 +23,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mymy.data.model.Attendance
 import com.example.mymy.data.model.Grade
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.remote.SupabaseConfig
 import com.example.mymy.ui.components.CalendarScheduleView
+import io.github.jan.supabase.auth.auth
 import com.example.mymy.ui.theme.*
 import com.example.mymy.ui.viewmodel.ParentViewModel
 
@@ -180,12 +182,24 @@ fun ParentScreen(
                         )
                         
                         Text(
-                            "Please contact the school administrator to verify your guardian email.",
+                            "Please contact the school administrator to verify your guardian email (${SupabaseConfig.client.auth.currentUserOrNull()?.email ?: "N/A"}).",
                             color = LightText,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.padding(top = 8.dp, bottom = 48.dp)
                         )
+
+                        Button(
+                            onClick = { viewModel.fetchChildren() },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen)
+                        ) {
+                            Icon(Icons.Default.Refresh, null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Retry Linking")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         TextButton(
                             onClick = onLogout,

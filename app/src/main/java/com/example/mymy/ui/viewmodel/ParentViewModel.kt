@@ -11,6 +11,7 @@ import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Grade
 import com.example.mymy.data.model.Schedule
 import com.example.mymy.data.model.User
+import com.example.mymy.data.model.UserRole
 import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -24,6 +25,7 @@ class ParentViewModel : ViewModel() {
     var childGrades by mutableStateOf<List<Grade>>(emptyList())
     var childSchedule by mutableStateOf<List<Schedule>>(emptyList())
     var teachersList by mutableStateOf<List<User>>(emptyList())
+    var selectedChildSection by mutableStateOf<com.example.mymy.data.model.Section?>(null)
 
     var attendanceRate by mutableStateOf(0)
     var averageGrade by mutableStateOf(0.0)
@@ -33,11 +35,24 @@ class ParentViewModel : ViewModel() {
     var successMessage by mutableStateOf<String?>(null)
 
     fun fetchChildren() {
-        val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id ?: return
-        
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
+            
+            var currentUser = SupabaseConfig.client.auth.currentUserOrNull()
+            if (currentUser == null) {
+                Log.d("ParentVM", "Current user null, waiting for session...")
+                kotlinx.coroutines.delay(1000)
+                currentUser = SupabaseConfig.client.auth.currentUserOrNull()
+            }
+            
+            val userId = currentUser?.id
+            if (userId == null) {
+                Log.e("ParentVM", "No user session found for Parent")
+                isLoading = false
+                return@launch
+            }
+
             try {
                 loadChildrenAndData(userId)
             } catch (e: Exception) {
@@ -50,98 +65,109 @@ class ParentViewModel : ViewModel() {
     }
 
     private suspend fun loadChildrenAndData(userId: String) {
-        Log.d("ParentVM", "Loading children for parent: $userId")
+        Log.d("ParentVM", "Starting Auto-Link check for Parent ID: $userId")
         
+        // 1. Get Parent Profile
         val parentProfile = try {
-            SupabaseConfig.client.postgrest["profiles"]
+            val profile = SupabaseConfig.client.postgrest["profiles"]
                 .select { filter { eq("id", userId) } }
                 .decodeSingleOrNull<User>()
+            Log.d("ParentVM", "Parent Profile: ${profile?.name}, Email in DB: ${profile?.email}")
+            profile
         } catch (e: Exception) { 
             Log.e("ParentVM", "Error fetching parent profile", e)
             null 
         }
 
-        val linkedChildren = try {
-            SupabaseConfig.client.postgrest["profiles"]
-                .select {
-                    filter { eq("parent_id", userId) }
-                }.decodeList<User>()
-        } catch (e: Exception) { 
-            Log.e("ParentVM", "Error decoding linked children", e)
-            errorMessage = "Data error: ${e.localizedMessage}"
-            emptyList() 
+        // 2. Get Parent Email (Verified Auth email is most reliable)
+        val authUser = SupabaseConfig.client.auth.currentUserOrNull()
+        val parentEmail = (authUser?.email ?: parentProfile?.email)?.trim()?.lowercase()
+        
+        Log.d("ParentVM", "Matching Key: '$parentEmail'")
+
+        if (parentEmail == null) {
+            Log.e("ParentVM", "No email found for parent account. Cannot proceed with linking.")
+            children = emptyList()
+            return
         }
 
-        val specificChild = if (parentProfile?.childId != null) {
-            try {
-                val student = SupabaseConfig.client.postgrest["profiles"]
-                    .select {
-                        filter { eq("student_id", parentProfile.childId) }
-                    }.decodeSingleOrNull<User>()
-                
-                if (student != null && student.parentId != userId) {
-                    SupabaseConfig.client.postgrest["profiles"].update(
-                        mapOf("parent_id" to userId)
-                    ) {
-                        filter { eq("id", student.id) }
-                    }
-                }
-                student
-            } catch (e: Exception) { 
-                Log.e("ParentVM", "Error fetching specific child", e)
-                null 
-            }
-        } else null
-
-        val matchedByGuardianEmail = if (parentProfile?.email != null) {
-            try {
-                val email = parentProfile.email.trim().lowercase()
-                val students = SupabaseConfig.client.postgrest["profiles"]
-                    .select {
-                        filter { 
-                            and {
-                                eq("role", "STUDENT")
-                                ilike("guardian_email", email)
-                            }
+        // 3. Find Children (Search by parent_id, guardian_email, or child_id)
+        val matchedChildren = try {
+            Log.d("ParentVM", "Querying potential students for Parent ID: $userId, Email: '$parentEmail', or ChildID: '${parentProfile?.childId}'...")
+            
+            // We search by:
+            // 1. parent_id (already linked via UUID)
+            // 2. guardian_email (automatic link candidate)
+            // 3. student_id (matches parent's child_id field if set)
+            val dbMatches = SupabaseConfig.client.postgrest["profiles"]
+                .select {
+                    filter {
+                        or {
+                            eq("parent_id", userId)
+                            ilike("guardian_email", "%$parentEmail%")
+                            parentProfile?.childId?.let { eq("student_id", it) }
                         }
-                    }.decodeList<User>()
+                    }
+                }.decodeList<User>()
+            
+            Log.d("ParentVM", "Database returned ${dbMatches.size} candidate profiles.")
+
+            dbMatches.filter { profile ->
+                // Flexible check for student status (role enum, role string, or studentNo presence)
+                val isStudent = profile.role == UserRole.STUDENT || 
+                                !profile.studentNo.isNullOrBlank() ||
+                                profile.role?.name?.equals("STUDENT", ignoreCase = true) == true
+
+                // Strict exact match after trimming whitespace in Kotlin
+                val gEmail = profile.guardianEmail?.trim()?.lowercase()
+                val isMatch = gEmail == parentEmail
                 
-                // Automatically establish the parent_id link in the DB if not already linked
-                students.forEach { student ->
-                    if (student.parentId != userId) {
+                if (isStudent) {
+                    Log.d("ParentVM", "Candidate Found: ${profile.name}, GuardianEmail: '${profile.guardianEmail}', Match: $isMatch")
+                }
+                isStudent && isMatch
+            }
+        } catch (e: Exception) {
+            Log.e("ParentVM", "Linking search failed: ${e.message}", e)
+            emptyList()
+        }
+
+        // 4. Update state with unique results
+        children = matchedChildren.distinctBy { it.id }
+        Log.d("ParentVM", "Final count of linked children: ${children.size}")
+
+        if (children.isNotEmpty()) {
+            // Safety check: ensure selectedChildId is still valid in the new list
+            val childToSelectId = if (children.any { it.id == selectedChildId }) {
+                selectedChildId!!
+            } else {
+                children[0].id
+            }
+            selectedChildId = childToSelectId
+            fetchChildDataInternal(childToSelectId)
+            
+            // 5. Background sync for parent_id consistency
+            children.forEach { student ->
+                if (student.parentId != userId) {
+                    viewModelScope.launch {
                         try {
+                            Log.d("ParentVM", "Syncing parent_id in background for ${student.name}")
                             SupabaseConfig.client.postgrest["profiles"].update(
                                 mapOf("parent_id" to userId)
                             ) {
                                 filter { eq("id", student.id) }
                             }
                         } catch (e: Exception) {
-                            Log.e("ParentVM", "Failed to auto-link student ${student.id}", e)
+                            Log.w("ParentVM", "Background auto-link update failed (check RLS): ${e.message}")
                         }
                     }
                 }
-                students
-            } catch (e: Exception) { 
-                Log.e("ParentVM", "Error matching by guardian email", e)
-                emptyList() 
-            }
-        } else emptyList()
-
-        val allChildren = (linkedChildren + listOfNotNull(specificChild) + matchedByGuardianEmail).distinctBy { it.id }
-        
-        Log.d("ParentVM", "Found ${allChildren.size} children. Current count: ${children.size}")
-        
-        // Only update if we actually found children OR if we are explicitly trying to clear (which we aren't here)
-        // This prevents the UI from flickering back to "Connect Student" if a background refresh temporarily returns empty
-        if (allChildren.isNotEmpty() || children.isEmpty()) {
-            children = allChildren
-            if (children.isNotEmpty()) {
-                val childToSelectId = selectedChildId ?: children[0].id
-                selectedChildId = childToSelectId
-                fetchChildDataInternal(childToSelectId)
             }
         } else {
-            Log.w("ParentVM", "Background refresh returned empty children list, but we already have ${children.size} linked. Ignoring empty result.")
+            Log.w("ParentVM", "No students were linked. Possible reasons:")
+            Log.w("ParentVM", "1. guardian_email in DB does not match '$parentEmail'")
+            Log.w("ParentVM", "2. RLS policy on 'profiles' table blocks SELECT for this parent.")
+            Log.w("ParentVM", "   REQUIRED SQL POLICY: CREATE POLICY \"Parents can view their children\" ON profiles FOR SELECT USING (auth.email() = guardian_email OR parent_id = auth.uid()::text);")
         }
     }
 
@@ -231,9 +257,21 @@ class ParentViewModel : ViewModel() {
         // studentId here is the UUID (e.g., b2a37148...)
         val student = children.find { it.id == studentId }
         
-        Log.d("ParentVM", "Fetching data for Student: ${student?.name} [UUID: $studentId]")
+        Log.d("ParentVM", "Fetching detailed data for Student: ${student?.name} [UUID: $studentId]")
 
-        // 1. Fetch Attendance - Use ONLY the UUID since the DB column is type UUID
+        // 0. Fetch Section Details
+        student?.sectionId?.let { sId ->
+            try {
+                selectedChildSection = SupabaseConfig.client.postgrest["sections"]
+                    .select { filter { eq("id", sId) } }
+                    .decodeSingleOrNull<com.example.mymy.data.model.Section>()
+            } catch (e: Exception) {
+                Log.e("ParentVM", "Section fetch failed", e)
+                selectedChildSection = null
+            }
+        } ?: run { selectedChildSection = null }
+
+        // 1. Fetch Attendance
         childAttendance = try {
             val res = SupabaseConfig.client.postgrest["attendance"]
                 .select { 
