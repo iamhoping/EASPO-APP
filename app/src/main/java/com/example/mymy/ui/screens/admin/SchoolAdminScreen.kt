@@ -718,7 +718,7 @@ fun DashboardHome(
                     androidx.compose.foundation.Image(
                         painter = androidx.compose.ui.res.painterResource(id = R.drawable.logo),
                         contentDescription = "Logo",
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(60.dp)
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {

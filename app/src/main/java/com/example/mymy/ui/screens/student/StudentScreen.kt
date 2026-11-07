@@ -144,7 +144,7 @@ fun DashboardContent(viewModel: StudentViewModel, onTabChange: (Int) -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Header
         Surface(
-            modifier = Modifier.fillMaxWidth().height(160.dp),
+            modifier = Modifier.fillMaxWidth().height(140.dp),
             color = DeepGreen,
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
@@ -158,12 +158,12 @@ fun DashboardContent(viewModel: StudentViewModel, onTabChange: (Int) -> Unit) {
                         androidx.compose.foundation.Image(
                             painter = androidx.compose.ui.res.painterResource(id = com.example.mymy.R.drawable.logo),
                             contentDescription = "Logo",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(60.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Student Home", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Welcome back, ${viewModel.userProfile?.name?.split(" ")?.firstOrNull() ?: "Student"}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+                            Text("Student Portal" , color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Welcome '_'  ${viewModel.userProfile?.name?.split(" ")?.firstOrNull() ?: " Student"}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -349,7 +349,14 @@ fun ScheduleList(viewModel: StudentViewModel) {
         schedules = viewModel.scheduleList,
         title = "Class Schedule",
         userRole = com.example.mymy.data.model.UserRole.STUDENT,
-        teacherNames = viewModel.teachersList.associate { (it.id ?: "") to (it.name ?: "Unknown Teacher") },
+        teacherNames = viewModel.teachersList.flatMap { teacher ->
+            val name = teacher.name ?: "Unknown Teacher"
+            listOfNotNull(
+                teacher.id.trim() to name,
+                teacher.teacherId?.trim()?.let { it to name }
+            )
+        }.toMap(),
+        sectionNames = viewModel.sectionNames,
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),
@@ -549,7 +556,7 @@ fun AttendanceList(viewModel: StudentViewModel) {
                             Text(att.date, fontWeight = FontWeight.SemiBold, color = DeepGreen)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
-                                if (att.status == "Present" && att.timeIn != null) {
+                                if (att.status.equals("Present", ignoreCase = true) && att.timeIn != null) {
                                     Text(" • ", color = LightText)
                                     // Extract time if it's a full timestamp, otherwise show as is
                                     val timeOnly = if (att.timeIn.contains(" ")) att.timeIn.split(" ")[1] else att.timeIn
@@ -557,14 +564,27 @@ fun AttendanceList(viewModel: StudentViewModel) {
                                 }
                             }
                         }
+                        val isPresent = att.status.equals("Present", ignoreCase = true)
+                        val isLate = att.status.equals("Late", ignoreCase = true)
+                        val isAbsent = att.status.equals("Absent", ignoreCase = true)
                         Surface(
-                            color = if (att.status == "Present") SageGreen.copy(alpha = 0.1f) else ErrorColor.copy(alpha = 0.1f),
+                            color = when {
+                                isPresent -> SageGreen.copy(alpha = 0.1f)
+                                isLate -> Color(0xFFFFF3E0)
+                                isAbsent -> ErrorColor.copy(alpha = 0.1f)
+                                else -> Color.Gray.copy(alpha = 0.1f)
+                            },
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 att.status,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = if (att.status == "Present") DeepGreen else ErrorColor,
+                                color = when {
+                                    isPresent -> DeepGreen
+                                    isLate -> Color(0xFFE65100)
+                                    isAbsent -> ErrorColor
+                                    else -> Color.Gray
+                                },
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.labelSmall
                             )

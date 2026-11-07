@@ -241,7 +241,7 @@ fun ParentDashboardOverview(
                         androidx.compose.foundation.Image(
                             painter = androidx.compose.ui.res.painterResource(id = com.example.mymy.R.drawable.logo),
                             contentDescription = "Logo",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(60.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
@@ -452,7 +452,14 @@ fun ChildScheduleList(viewModel: ParentViewModel) {
         schedules = viewModel.childSchedule,
         title = "Child's Schedule",
         userRole = com.example.mymy.data.model.UserRole.STUDENT,
-        teacherNames = viewModel.teachersList.associate { (it.id ?: "") to (it.name ?: "Unknown Teacher") },
+        teacherNames = viewModel.teachersList.flatMap { teacher ->
+            val name = teacher.name ?: "Unknown Teacher"
+            listOfNotNull(
+                teacher.id.trim() to name,
+                teacher.teacherId?.trim()?.let { it to name }
+            )
+        }.toMap(),
+        sectionNames = viewModel.sectionNames,
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),
@@ -600,10 +607,18 @@ fun AttendanceListItem(att: Attendance) {
         ) {
             Column {
                 Text(att.date, fontWeight = FontWeight.SemiBold)
-                Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
+                    if (att.status.equals("Present", ignoreCase = true) && att.timeIn != null) {
+                        Text(" • ", color = LightText)
+                        val timeOnly = if (att.timeIn.contains(" ")) att.timeIn.split(" ")[1] else att.timeIn
+                        Text(timeOnly, style = MaterialTheme.typography.bodySmall, color = LightText)
+                    }
+                }
             }
-            val isPresent = att.status == "Present"
-            val isLate = att.status == "Late"
+            val isPresent = att.status.equals("Present", ignoreCase = true)
+            val isLate = att.status.equals("Late", ignoreCase = true)
+            val isAbsent = att.status.equals("Absent", ignoreCase = true)
             SuggestionChip(
                 onClick = { },
                 label = { Text(att.status) },
@@ -611,12 +626,14 @@ fun AttendanceListItem(att: Attendance) {
                     containerColor = when {
                         isPresent -> LightGreen.copy(alpha = 0.2f)
                         isLate -> Color(0xFFFFF3E0)
-                        else -> ErrorColor.copy(alpha = 0.1f)
+                        isAbsent -> ErrorColor.copy(alpha = 0.1f)
+                        else -> Color.Gray.copy(alpha = 0.1f)
                     },
                     labelColor = when {
                         isPresent -> SageGreen
                         isLate -> Color(0xFFE65100)
-                        else -> ErrorColor
+                        isAbsent -> ErrorColor
+                        else -> Color.Gray
                     }
                 ),
                 border = null,

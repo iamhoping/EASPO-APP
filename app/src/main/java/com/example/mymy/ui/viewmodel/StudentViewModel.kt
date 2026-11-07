@@ -9,6 +9,7 @@ import com.example.mymy.data.model.Attendance
 import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Grade
 import com.example.mymy.data.model.Schedule
+import com.example.mymy.data.model.Section
 import com.example.mymy.data.model.User
 import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
@@ -27,6 +28,7 @@ class StudentViewModel : ViewModel() {
     var gradesList by mutableStateOf<List<Grade>>(emptyList())
     var scheduleList by mutableStateOf<List<Schedule>>(emptyList())
     var teachersList by mutableStateOf<List<User>>(emptyList())
+    var sectionNames by mutableStateOf<Map<Long, String>>(emptyMap())
     
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -103,6 +105,15 @@ class StudentViewModel : ViewModel() {
                             filter { eq("role", "TEACHER") }
                         }.decodeList<User>()
                 } catch (e: Exception) { emptyList() }
+
+                // Fetch Sections for name mapping
+                try {
+                    val sections = SupabaseConfig.client.postgrest["sections"]
+                        .select().decodeList<Section>()
+                    sectionNames = sections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") }
+                } catch (e: Exception) {
+                    android.util.Log.e("StudentVM", "Error fetching sections", e)
+                }
                     
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to fetch data"

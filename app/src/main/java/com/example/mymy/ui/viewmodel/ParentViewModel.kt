@@ -26,6 +26,7 @@ class ParentViewModel : ViewModel() {
     var childSchedule by mutableStateOf<List<Schedule>>(emptyList())
     var teachersList by mutableStateOf<List<User>>(emptyList())
     var selectedChildSection by mutableStateOf<com.example.mymy.data.model.Section?>(null)
+    var sectionNames by mutableStateOf<Map<Long, String>>(emptyMap())
 
     var attendanceRate by mutableStateOf(0)
     var averageGrade by mutableStateOf(0.0)
@@ -335,6 +336,15 @@ class ParentViewModel : ViewModel() {
                     filter { eq("role", "TEACHER") }
                 }.decodeList<User>()
         } catch (e: Exception) { emptyList() }
+
+        // Fetch Sections for name mapping
+        try {
+            val sections = SupabaseConfig.client.postgrest["sections"]
+                .select().decodeList<com.example.mymy.data.model.Section>()
+            sectionNames = sections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") }
+        } catch (e: Exception) {
+            Log.e("ParentVM", "Error fetching sections", e)
+        }
         
         Log.d("ParentVM", "Sync Complete: Att=${childAttendance.size}, Grades=${childGrades.size}, Sched=${childSchedule.size}")
     }

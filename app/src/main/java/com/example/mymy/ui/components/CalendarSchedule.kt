@@ -1,10 +1,13 @@
 package com.example.mymy.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,7 +49,8 @@ fun CalendarScheduleView(
     userImage: @Composable (() -> Unit)? = null,
     userRole: UserRole = UserRole.STUDENT,
     teacherNames: Map<String, String> = emptyMap(),
-    sectionNames: Map<Long, String> = emptyMap()
+    sectionNames: Map<Long, String> = emptyMap(),
+    onViewClassList: ((Schedule) -> Unit)? = null
 ) {
     val calendar = remember { Calendar.getInstance() }
     val todayShort = remember {
@@ -85,7 +89,10 @@ fun CalendarScheduleView(
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF8FBFB))) {
         // Header
         Surface(
-            modifier = Modifier.fillMaxWidth().height(if (selectedSchedule == null) 160.dp else 140.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+                .height(if (selectedSchedule == null) 160.dp else 140.dp),
             color = DeepGreen,
             shape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
         ) {
@@ -131,108 +138,106 @@ fun CalendarScheduleView(
             }
         }
 
-        AnimatedVisibility(
-            visible = selectedSchedule == null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            Column {
-                Spacer(modifier = Modifier.height(24.dp))
-                // Day Selector
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(weekDays) { day ->
-                        val isSelected = selectedDay == day.name
-                        val isToday = todayShort == day.name
-                        
-                        Surface(
-                            onClick = { selectedDay = day.name },
-                            modifier = Modifier.width(64.dp).height(80.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = if (isSelected) SageGreen else Color.White,
-                            border = if (isToday && !isSelected) androidx.compose.foundation.BorderStroke(2.dp, SageGreen) else null,
-                            shadowElevation = if (isSelected) 4.dp else 0.dp
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier.padding(8.dp)
+        AnimatedContent(
+            targetState = selectedSchedule,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(300)) togetherWith
+                fadeOut(animationSpec = tween(300))
+            },
+            label = "ScheduleTransition"
+        ) { targetSchedule ->
+            if (targetSchedule == null) {
+                Column {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    // Day Selector
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(weekDays) { day ->
+                            val isSelected = selectedDay == day.name
+                            val isToday = todayShort == day.name
+                            
+                            Surface(
+                                onClick = { selectedDay = day.name },
+                                modifier = Modifier.width(64.dp).height(80.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) SageGreen else Color.White,
+                                border = if (isToday && !isSelected) androidx.compose.foundation.BorderStroke(2.dp, SageGreen) else null,
+                                shadowElevation = if (isSelected) 4.dp else 0.dp
                             ) {
-                                Text(
-                                    day.name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) Color.White else Color.Gray,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    day.number,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isSelected) Color.White else DeepGreen
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Text(
+                                        day.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isSelected) Color.White else Color.Gray,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        day.number,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isSelected) Color.White else DeepGreen
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Text(
+                        text = "${selectedDay}'S CLASSES",
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = DeepGreen
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val dailySchedules = schedules.filter { 
+                        it.day.uppercase().startsWith(selectedDay.take(3)) 
+                    }.sortedBy { it.startTime }
+
+                    if (dailySchedules.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.EventBusy, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("No classes scheduled for this day", color = Color.Gray)
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(bottom = 32.dp)
+                        ) {
+                            items(dailySchedules) { schedule ->
+                                ScheduleCard(
+                                    schedule = schedule,
+                                    userRole = userRole,
+                                    teacherNames = teacherNames,
+                                    sectionNames = sectionNames,
+                                    onClick = { selectedSchedule = schedule }
                                 )
                             }
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Text(
-                    text = "${selectedDay}'S CLASSES",
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = DeepGreen
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
-                val dailySchedules = schedules.filter { 
-                    it.day.uppercase().startsWith(selectedDay.take(3)) 
-                }.sortedBy { it.startTime }
-
-                if (dailySchedules.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.EventBusy, null, modifier = Modifier.size(64.dp), tint = Color.LightGray)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("No classes scheduled for this day", color = Color.Gray)
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        contentPadding = PaddingValues(bottom = 32.dp)
-                    ) {
-                        items(dailySchedules) { schedule ->
-                            ScheduleCard(
-                                schedule = schedule,
-                                userRole = userRole,
-                                teacherNames = teacherNames,
-                                sectionNames = sectionNames,
-                                onClick = { selectedSchedule = schedule }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = selectedSchedule != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            if (selectedSchedule != null) {
+            } else {
                 ScheduleDetailsView(
-                    schedule = selectedSchedule!!,
+                    schedule = targetSchedule,
                     userRole = userRole,
                     teacherNames = teacherNames,
-                    sectionNames = sectionNames
+                    sectionNames = sectionNames,
+                    onViewClassList = onViewClassList
                 )
             }
         }
@@ -251,7 +256,11 @@ fun ScheduleCard(
         formatTimeRange(schedule.startTime, schedule.endTime)
     }
     
-    val teacherName = schedule.teacherId?.let { teacherNames[it] } ?: "Not assigned"
+    /*val teacherName = remember(schedule.teacherId, teacherNames) {
+        schedule.teacherId?.trim()?.let { tid ->
+            teacherNames[tid] ?: teacherNames.entries.find { it.key.trim().equals(tid, ignoreCase = true) }?.value
+        } ?: "Not assigned"
+    }*/
     val sectionName = schedule.sectionId?.let { sectionNames[it] } ?: "Not assigned"
 
     Surface(
@@ -298,7 +307,7 @@ fun ScheduleCard(
                         Spacer(modifier = Modifier.width(12.dp))
                         Icon(Icons.Default.Person, null, modifier = Modifier.size(14.dp), tint = Color.Gray)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(teacherName, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        //Text(teacherName, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     }
                 }
             }
@@ -312,9 +321,14 @@ fun ScheduleDetailsView(
     schedule: Schedule,
     userRole: UserRole,
     teacherNames: Map<String, String>,
-    sectionNames: Map<Long, String>
+    sectionNames: Map<Long, String>,
+    onViewClassList: ((Schedule) -> Unit)? = null
 ) {
-    val teacherName = schedule.teacherId?.let { teacherNames[it] } ?: "Not assigned"
+    /*val teacherName = remember(schedule.teacherId, teacherNames) {
+        schedule.teacherId?.trim()?.let { tid ->
+            teacherNames[tid] ?: teacherNames.entries.find { it.key.trim().equals(tid, ignoreCase = true) }?.value
+        } ?: "--"
+    }*/
     val sectionName = schedule.sectionId?.let { sectionNames[it] } ?: "Not assigned"
     val displayTime = formatTimeRange(schedule.startTime, schedule.endTime)
 
@@ -333,15 +347,16 @@ fun ScheduleDetailsView(
             DetailItem(icon = Icons.Default.Groups, label = "Section", value = sectionName)
         }
         
-        if (userRole != UserRole.TEACHER) {
-            DetailItem(icon = Icons.Default.Person, label = "Teacher", value = teacherName)
-        }
+        //if (userRole != UserRole.TEACHER) {
+          //  DetailItem(icon = Icons.Default.Person, label = "Teacher", value = teacherName)
+        //}
         
         if (userRole == UserRole.TEACHER) {
             Spacer(modifier = Modifier.height(20.dp))
             Button(
-                onClick = { /* Navigate to class list if needed */ },
+                onClick = { onViewClassList?.invoke(schedule) },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = onViewClassList != null,
                 colors = ButtonDefaults.buttonColors(containerColor = DeepGreen),
                 shape = RoundedCornerShape(12.dp)
             ) {

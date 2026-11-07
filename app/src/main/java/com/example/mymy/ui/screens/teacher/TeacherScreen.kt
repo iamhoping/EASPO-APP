@@ -157,7 +157,18 @@ fun TeacherScreen(
                         onNavigateToAttendance = { selectedTab = 2 },
                         onNavigateToStudents = { selectedTab = 3 }
                     )
-                    1 -> TeacherSchedule(viewModel)
+                    1 -> TeacherSchedule(
+                        viewModel = viewModel,
+                        onViewClassList = { schedule ->
+                            // Find the section and navigate to student management tab
+                            viewModel.sections.find { it.id == schedule.sectionId }?.let { section ->
+                                // This requires a way to set the internal state of StudentManagementFlow
+                                // We'll add a function to ViewModel to handle this navigation
+                                viewModel.navigateToSection(section)
+                                selectedTab = 3
+                            }
+                        }
+                    )
                     2 -> TeacherAttendanceScreen(viewModel)
                     3 -> StudentManagementFlow(viewModel)
                     4 -> TeacherProfile(viewModel, onLogout = onLogout)
@@ -213,7 +224,7 @@ fun TeacherDashboardHome(
                         androidx.compose.foundation.Image(
                             painter = androidx.compose.ui.res.painterResource(id = com.example.mymy.R.drawable.logo),
                             contentDescription = "Logo",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(60.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
@@ -297,7 +308,8 @@ fun TeacherDashboardHome(
             }
 
             items(todaySchedules.take(1)) { schedule ->
-                NextClassCard(schedule, viewModel.students.size)
+                val sectionName = viewModel.sectionNames[schedule.sectionId] ?: "Not assigned"
+                NextClassCard(schedule, viewModel.students.size, sectionName)
             }
         }
     }
@@ -347,7 +359,7 @@ fun QuickAccessItem(title: String, subtitle: String, icon: androidx.compose.ui.g
 }
 
 @Composable
-fun NextClassCard(schedule: com.example.mymy.data.model.Schedule, studentCount: Int) {
+fun NextClassCard(schedule: com.example.mymy.data.model.Schedule, studentCount: Int, sectionName: String = "Not assigned") {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -359,7 +371,7 @@ fun NextClassCard(schedule: com.example.mymy.data.model.Schedule, studentCount: 
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Surface(color = LightGreen, shape = RoundedCornerShape(4.dp)) {
-                    Text("SECTION B", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = DeepGreen, fontWeight = FontWeight.Bold)
+                    Text(sectionName, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = DeepGreen, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(schedule.subject ?: "No Subject", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DeepGreen)
@@ -393,12 +405,27 @@ fun NextClassCard(schedule: com.example.mymy.data.model.Schedule, studentCount: 
 }
 
 @Composable
-fun TeacherSchedule(viewModel: TeacherViewModel) {
+fun TeacherSchedule(
+    viewModel: TeacherViewModel,
+    onViewClassList: (com.example.mymy.data.model.Schedule) -> Unit
+) {
+    val teacherNames = remember(viewModel.userProfile) {
+        viewModel.userProfile?.let {
+            val name = it.name ?: "Me"
+            listOfNotNull(
+                it.id.trim() to name,
+                it.teacherId?.trim()?.let { tid -> tid to name }
+            ).toMap()
+        } ?: emptyMap()
+    }
+    
     CalendarScheduleView(
         schedules = viewModel.scheduleList,
         title = "Class Schedule",
         userRole = com.example.mymy.data.model.UserRole.TEACHER,
-        sectionNames = viewModel.sections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") },
+        teacherNames = teacherNames,
+        sectionNames = viewModel.sectionNames,
+        onViewClassList = onViewClassList,
         userImage = {
             Surface(
                 modifier = Modifier.size(48.dp),
@@ -414,14 +441,26 @@ fun TeacherSchedule(viewModel: TeacherViewModel) {
 @Composable
 fun StudentManagementFlow(viewModel: TeacherViewModel) {
     var selectedGrade by remember { mutableStateOf<String?>(null) }
-    var selectedSection by remember { mutableStateOf<com.example.mymy.data.model.Section?>(null) }
+    var selectedSection by remember(viewModel.currentNavigatedSection) { 
+        mutableStateOf(viewModel.currentNavigatedSection) 
+    }
+    
+    // Update grade level if section is pre-selected via navigation
+    LaunchedEffect(selectedSection) {
+        if (selectedSection != null) {
+            selectedGrade = selectedSection?.gradeLevel
+        }
+    }
     
     when {
         selectedSection != null -> {
             SectionStudentsScreen(
                 section = selectedSection!!,
                 viewModel = viewModel,
-                onBack = { selectedSection = null }
+                onBack = { 
+                    selectedSection = null
+                    viewModel.clearNavigation()
+                }
             )
         }
         selectedGrade != null -> {
@@ -1137,8 +1176,19 @@ fun SectionAttendanceDetailScreen(
                     val attendance = viewModel.attendanceRecords.find { 
                         it.studentId == student.id && it.scheduleId == selectedSchedule?.id 
                     }
-                    val status = attendance?.status ?: "Absent" // Default to Absent if no record
-                    val timeIn = attendance?.timeIn
+                    val status = attendance?.status ?: "Pending"
+                    val isPresent = status.equals("Present", ignoreCase = true)
+                    val isLate = status.equals("Late", ignoreCase = true)
+                    val isAbsent = status.equals("Absent", ignoreCase = true)
+
+                    val displayInfo = when {
+                        attendance == null -> "Not marked yet"
+                        isPresent || isLate -> {
+                            val time = attendance.timeIn?.split(" ")?.lastOrNull() ?: "--:--"
+                            "${attendance.date} at $time"
+                        }
+                        else -> attendance.date
+                    }
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -1154,9 +1204,9 @@ fun SectionAttendanceDetailScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(student.name ?: "Unknown", fontWeight = FontWeight.Bold, color = DeepGreen)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(12.dp), tint = LightText)
+                                    Icon(Icons.Default.Event, null, modifier = Modifier.size(12.dp), tint = LightText)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(timeIn ?: "--:--", style = MaterialTheme.typography.bodySmall, color = LightText)
+                                    Text(displayInfo, style = MaterialTheme.typography.bodySmall, color = LightText)
                                 }
                             }
                             
@@ -1171,10 +1221,15 @@ fun SectionAttendanceDetailScreen(
 
 @Composable
 fun StatusBadge(status: String) {
-    val color = when(status) {
-        "Present" -> SageGreen
-        "Late" -> Color(0xFFFFB74D)
-        else -> Color(0xFFEF5350)
+    val isPresent = status.equals("Present", ignoreCase = true)
+    val isLate = status.equals("Late", ignoreCase = true)
+    val isAbsent = status.equals("Absent", ignoreCase = true)
+
+    val color = when {
+        isPresent -> SageGreen
+        isLate -> Color(0xFFFFB74D)
+        isAbsent -> ErrorColor
+        else -> Color.Gray
     }
     Surface(
         color = color.copy(alpha = 0.1f),

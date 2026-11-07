@@ -25,6 +25,7 @@ class TeacherViewModel : ViewModel() {
     var students by mutableStateOf<List<User>>(emptyList())
     var scheduleList by mutableStateOf<List<Schedule>>(emptyList())
     var sections by mutableStateOf<List<Section>>(emptyList())
+    var sectionNames by mutableStateOf<Map<Long, String>>(emptyMap())
     var enrollments by mutableStateOf<List<Enrollment>>(emptyList())
     var userProfile by mutableStateOf<User?>(null)
     var studentGrades by mutableStateOf<Map<String, List<Grade>>>(emptyMap()) // studentId -> list of grades
@@ -34,65 +35,30 @@ class TeacherViewModel : ViewModel() {
     
     var isLoading by mutableStateOf(false)
 
+    var currentNavigatedSection by mutableStateOf<Section?>(null)
+    
+    fun navigateToSection(section: Section) {
+        currentNavigatedSection = section
+    }
+    
+    fun clearNavigation() {
+        currentNavigatedSection = null
+    }
+
     fun fetchAttendanceForSection(sectionId: Long, date: String) {
         viewModelScope.launch {
             isLoading = true
             try {
-                // 1. Fetch existing records
-                val existingRecords = SupabaseConfig.client.postgrest["attendance"]
+                // Fetch only existing records (View Only)
+                attendanceRecords = SupabaseConfig.client.postgrest["attendance"]
                     .select {
                         filter {
                             eq("section_id", sectionId)
                             eq("attendance_date", date)
                         }
                     }.decodeList<Attendance>()
-
-                // 2. Identify missing records (Initialization Rule 1 & 2)
-                val sectionStudents = students.filter { it.sectionId == sectionId }
-                val sectionSchedules = scheduleList.filter { it.sectionId == sectionId }
-                
-                val initializedRecords = mutableListOf<Attendance>()
-                
-                for (student in sectionStudents) {
-                    for (schedule in sectionSchedules) {
-                        val exists = existingRecords.any { 
-                            it.studentId == student.id && it.scheduleId == schedule.id 
-                        }
-                        
-                        if (!exists) {
-                            initializedRecords.add(
-                                Attendance(
-                                    studentId = student.id,
-                                    sectionId = sectionId,
-                                    scheduleId = schedule.id,
-                                    date = date,
-                                    status = "Absent", // Rule 1: Default to Absent
-                                    subject = schedule.subject,
-                                    subjectId = schedule.subjectId,
-                                    teacherId = schedule.teacherId
-                                )
-                            )
-                        }
-                    }
-                }
-
-                // 3. Bulk insert missing records if any
-                if (initializedRecords.isNotEmpty()) {
-                    SupabaseConfig.client.postgrest["attendance"].insert(initializedRecords)
-                    // Re-fetch to get IDs
-                    attendanceRecords = SupabaseConfig.client.postgrest["attendance"]
-                        .select {
-                            filter {
-                                eq("section_id", sectionId)
-                                eq("attendance_date", date)
-                            }
-                        }.decodeList<Attendance>()
-                } else {
-                    attendanceRecords = existingRecords
-                }
-
             } catch (e: Exception) {
-                Log.e("TeacherVM", "Error fetching/initializing attendance", e)
+                Log.e("TeacherVM", "Error fetching attendance", e)
                 attendanceRecords = emptyList()
             } finally {
                 isLoading = false
@@ -152,6 +118,9 @@ class TeacherViewModel : ViewModel() {
                     Log.e("TeacherVM", "Error fetching sections", e)
                     emptyList()
                 }
+                
+                // Map all section names for the schedule view
+                sectionNames = allSections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") }
                 
                 val sectionIdsFromSchedules = fetchedSchedules.mapNotNull { it.sectionId }.toSet()
                 sections = allSections.filter { 
