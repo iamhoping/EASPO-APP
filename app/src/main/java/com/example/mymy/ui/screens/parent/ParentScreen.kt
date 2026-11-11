@@ -609,10 +609,36 @@ fun AttendanceListItem(att: Attendance) {
                 Text(att.date, fontWeight = FontWeight.SemiBold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(att.subject ?: "General", style = MaterialTheme.typography.bodySmall, color = LightText)
-                    if (att.status.equals("Present", ignoreCase = true) && att.timeIn != null) {
+                    if ((att.status.equals("Present", ignoreCase = true) || att.status.equals("Late", ignoreCase = true)) && att.timeIn != null) {
                         Text(" • ", color = LightText)
-                        val timeOnly = if (att.timeIn.contains(" ")) att.timeIn.split(" ")[1] else att.timeIn
-                        Text(timeOnly, style = MaterialTheme.typography.bodySmall, color = LightText)
+                        val displayTime = remember(att.timeIn) {
+                            try {
+                                val parts = att.timeIn.split(" ")
+                                val timeStr = if (parts.size > 1) parts[1] else parts[0]
+                                
+                                if (timeStr.contains("AM", ignoreCase = true) || timeStr.contains("PM", ignoreCase = true)) {
+                                    timeStr
+                                } else {
+                                    val t = timeStr.split(":")
+                                    if (t.size >= 2) {
+                                        val h = t[0].toInt()
+                                        val m = t[1].toInt()
+                                        val ampm = if (h >= 12) "PM" else "AM"
+                                        val displayH = when {
+                                            h == 0 -> 12
+                                            h > 12 -> h - 12
+                                            else -> h
+                                        }
+                                        "%d:%02d %s".format(displayH, m, ampm)
+                                    } else {
+                                        timeStr
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                att.timeIn
+                            }
+                        }
+                        Text(displayTime, style = MaterialTheme.typography.bodySmall, color = LightText)
                     }
                 }
             }
