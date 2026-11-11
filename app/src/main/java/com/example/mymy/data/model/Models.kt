@@ -28,6 +28,22 @@ data class User(
 )
 
 @Serializable
+data class StudentQrSession(
+    val id: String? = null,
+    @SerialName("student_id") val studentId: String? = null,
+    @SerialName("session_code") val sessionCode: String,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String,
+    @SerialName("used_at") val usedAt: String? = null
+)
+
+@Serializable
+data class ScanResponse(
+    val success: Boolean,
+    val message: String
+)
+
+@Serializable
 data class RegisterUserRequest(
     val email: String,
     val password: String,

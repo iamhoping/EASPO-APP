@@ -10,6 +10,7 @@ import com.example.mymy.data.model.Enrollment
 import com.example.mymy.data.model.Grade
 import com.example.mymy.data.model.Schedule
 import com.example.mymy.data.model.Section
+import com.example.mymy.data.model.StudentQrSession
 import com.example.mymy.data.model.User
 import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
@@ -19,9 +20,12 @@ import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import java.util.TimeZone
 
 class StudentViewModel : ViewModel() {
     var attendanceList by mutableStateOf<List<Attendance>>(emptyList())
@@ -34,16 +38,20 @@ class StudentViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
     var userProfile by mutableStateOf<User?>(null)
 
+    // Dynamic QR Session
+    var qrSession by mutableStateOf<StudentQrSession?>(null)
+    var qrCountdown by mutableStateOf(0)
+    var qrError by mutableStateOf<String?>(null)
+    private var qrJob: Job? = null
+    private var countdownJob: Job? = null
+
     val attendanceBySchedule: Map<Long, List<Attendance>>
         get() = attendanceList.groupBy { it.scheduleId ?: -1L }
 
     val overallAttendance: String
         get() {
             if (attendanceList.isEmpty()) return "0%"
-            // Filter records to count each day only once if multiple records exist per day (e.g. per subject)
-            // or just count all records. Usually "Overall Attendance" in student dashboards refers to 
-            // the percentage of "Present/Late" records vs total scheduled records.
-            val validRecords = attendanceList.filter { it.status != "Scheduled" } // exclude placeholders if any
+            val validRecords = attendanceList.filter { it.status != "Scheduled" } 
             if (validRecords.isEmpty()) return "0%"
             
             val presentCount = validRecords.count { 
@@ -56,28 +64,21 @@ class StudentViewModel : ViewModel() {
 
     fun fetchData() {
         val userId = SupabaseConfig.client.auth.currentUserOrNull()?.id ?: return
-        android.util.Log.d("StudentVM", "fetchData started for userId: $userId")
         
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
-                // Fetch Profile
                 userProfile = SupabaseConfig.client.postgrest["profiles"]
                     .select {
                         filter { eq("id", userId) }
                     }.decodeSingleOrNull<User>()
-                android.util.Log.d("StudentVM", "Fetched profile: $userProfile")
 
-                // Fetch Attendance
                 fetchAttendance(userId)
                 subscribeToAttendance(userId)
-
-                // Fetch Grades
                 fetchGrades(userId)
                 subscribeToGrades(userId)
 
-                // Fetch Schedule via Enrollments AND Section
                 scheduleList = try {
                     val enrollments = SupabaseConfig.client.postgrest["enrollments"]
                         .select {
@@ -93,12 +94,8 @@ class StudentViewModel : ViewModel() {
                     allSchedules.filter { 
                         it.id in scheduleIds || (sectionId != null && it.sectionId == sectionId)
                     }
-                } catch (e: Exception) { 
-                    android.util.Log.e("StudentVM", "Error fetching schedule", e)
-                    emptyList() 
-                }
+                } catch (e: Exception) { emptyList() }
 
-                // Fetch Teachers for Schedule
                 teachersList = try {
                     SupabaseConfig.client.postgrest["profiles"]
                         .select {
@@ -106,14 +103,11 @@ class StudentViewModel : ViewModel() {
                         }.decodeList<User>()
                 } catch (e: Exception) { emptyList() }
 
-                // Fetch Sections for name mapping
                 try {
                     val sections = SupabaseConfig.client.postgrest["sections"]
                         .select().decodeList<Section>()
                     sectionNames = sections.associate { (it.id ?: 0L) to (it.name ?: "Unknown Section") }
-                } catch (e: Exception) {
-                    android.util.Log.e("StudentVM", "Error fetching sections", e)
-                }
+                } catch (e: Exception) { }
                     
             } catch (e: Exception) {
                 errorMessage = e.message ?: "Failed to fetch data"
@@ -129,10 +123,7 @@ class StudentViewModel : ViewModel() {
                 .select {
                     filter { eq("student_id", userId) }
                 }.decodeList<Attendance>()
-            android.util.Log.d("StudentVM", "Fetched ${attendanceList.size} attendance records")
-        } catch (e: Exception) {
-            android.util.Log.e("StudentVM", "Error fetching attendance", e)
-        }
+        } catch (e: Exception) { }
     }
 
     private fun subscribeToAttendance(userId: String) {
@@ -142,8 +133,7 @@ class StudentViewModel : ViewModel() {
             filter(FilterOperation("student_id", FilterOperator.EQ, userId))
         }
 
-        flow.onEach { action ->
-            android.util.Log.d("StudentVM", "Attendance change detected: $action")
+        flow.onEach { 
             fetchAttendance(userId)
         }.launchIn(viewModelScope)
 
@@ -158,31 +148,18 @@ class StudentViewModel : ViewModel() {
                 .select {
                     filter { eq("student_id", userId) }
                 }.decodeList<Grade>()
-            android.util.Log.d("StudentVM", "Fetched ${grades.size} grades for $userId")
-            grades.forEach { android.util.Log.d("StudentVM", "Grade: ${it.subject} = ${it.score}, student_id: ${it.studentId}") }
-            
             gradesList = grades.sortedByDescending { it.createdAt }
-        } catch (e: Exception) {
-            android.util.Log.e("StudentVM", "Error fetching grades", e)
-        }
+        } catch (e: Exception) { }
     }
 
     private fun subscribeToGrades(userId: String) {
-        android.util.Log.d("StudentVM", "Subscribing to grades for student_id: $userId")
         val channel = SupabaseConfig.client.channel("grades_changes")
         val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
             table = "grades"
             filter(FilterOperation("student_id", FilterOperator.EQ, userId))
         }
         
-        flow.onEach { action ->
-            android.util.Log.d("StudentVM", "REALTIME EVENT RECEIVED: $action")
-            when (action) {
-                is PostgresAction.Insert -> android.util.Log.d("StudentVM", "Insert: ${action.record}")
-                is PostgresAction.Update -> android.util.Log.d("StudentVM", "Update: ${action.oldRecord} -> ${action.record}")
-                is PostgresAction.Delete -> android.util.Log.d("StudentVM", "Delete: ${action.oldRecord}")
-                else -> {}
-            }
+        flow.onEach { 
             fetchGrades(userId)
         }.launchIn(viewModelScope)
 
@@ -203,6 +180,91 @@ class StudentViewModel : ViewModel() {
                 errorMessage = "Update failed: ${e.message}"
             } finally {
                 isLoading = false
+            }
+        }
+    }
+
+    fun startQrSession() {
+        if (qrJob?.isActive == true) return
+        qrError = null
+        generateNewQrSession()
+    }
+
+    fun stopQrSession() {
+        qrJob?.cancel()
+        countdownJob?.cancel()
+        qrSession = null
+        qrCountdown = 0
+    }
+
+    private fun generateNewQrSession() {
+        qrJob?.cancel()
+        qrJob = viewModelScope.launch {
+            try {
+                // First check current user status
+                val currentUser = SupabaseConfig.client.auth.currentUserOrNull()
+                if (currentUser == null) {
+                    qrError = "Authentication failed. Please log in again."
+                    return@launch
+                }
+                
+                android.util.Log.d("StudentVM", "Generating QR for user: ${currentUser.id}")
+                
+                val result = SupabaseConfig.client.postgrest.rpc("generate_student_qr_session")
+                    .decodeAs<StudentQrSession>()
+                
+                qrSession = result
+                qrError = null
+                
+                startCountdown(result)
+            } catch (e: Exception) {
+                android.util.Log.e("StudentVM", "QR Generation failed", e)
+                val detailedError = when {
+                    e.message?.contains("42501") == true -> "Unauthorized: Ensure you are logged in as an active student."
+                    e.message?.contains("connection") == true -> "Network error. Please check your internet."
+                    else -> e.message ?: "Unknown error"
+                }
+                qrError = "Failed to generate QR Code: $detailedError"
+                qrSession = null
+            }
+        }
+    }
+
+    private fun startCountdown(session: StudentQrSession) {
+        countdownJob?.cancel()
+        countdownJob = viewModelScope.launch {
+            try {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                
+                val cleanExp = session.expiresAt.substring(0, 19)
+                val expiryDate = sdf.parse(cleanExp) ?: return@launch
+                
+                val cleanCreated = session.createdAt?.substring(0, 19)
+                val createdDate = cleanCreated?.let { sdf.parse(it) }
+                
+                // Use server-provided timestamps to determine the duration
+                // This avoids reliance on local device time for the authority of the session length
+                val durationSeconds = if (createdDate != null) {
+                    ((expiryDate.time - createdDate.time) / 1000).toInt()
+                } else {
+                    30 // fallback
+                }
+
+                var secondsLeft = durationSeconds
+                while (secondsLeft >= 0) {
+                    qrCountdown = secondsLeft
+                    if (secondsLeft == 0) {
+                        generateNewQrSession()
+                        break
+                    }
+                    delay(1000)
+                    secondsLeft--
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("StudentVM", "Countdown error", e)
+                delay(2000)
+                generateNewQrSession()
             }
         }
     }

@@ -7,11 +7,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mymy.data.model.Attendance
+import com.example.mymy.data.model.ScanResponse
 import com.example.mymy.data.model.User
 import com.example.mymy.data.remote.SupabaseConfig
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,85 +46,28 @@ class ScannerViewModel : ViewModel() {
         }
     }
 
-    fun processScan(studentNo: String) {
+    fun processScan(sessionCode: String) {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             successMessage = null
             try {
-                // 1. Find student by studentNo
-                val student = SupabaseConfig.client.postgrest["profiles"]
-                    .select {
-                        filter {
-                            eq("student_id", studentNo)
-                            eq("role", "STUDENT")
-                        }
-                    }.decodeSingleOrNull<User>()
-
-                if (student == null) {
-                    errorMessage = "Student with ID $studentNo not found"
-                    return@launch
-                }
-
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                val now = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-
-                // 2. Check for existing attendance today
-                val existing = SupabaseConfig.client.postgrest["attendance"]
-                    .select {
-                        filter {
-                            eq("student_id", student.id)
-                            eq("attendance_date", today)
-                        }
-                    }.decodeList<Attendance>().find { it.scheduleId == null }
-
-                if (scanMode == "Entrance") {
-                    if (existing != null && existing.timeIn != null) {
-                        errorMessage = "${student.name} already scanned IN today at ${existing.timeIn}"
-                    } else if (existing != null) {
-                        // Update existing (maybe it was marked absent by a teacher auto-init)
-                        SupabaseConfig.client.postgrest["attendance"].update(
-                            mapOf(
-                                "status" to "Present",
-                                "time_in" to now,
-                                "updated_at" to now
-                            )
-                        ) {
-                            filter { eq("id", existing.id!!) }
-                        }
-                        successMessage = "Entrance recorded for ${student.name}"
-                    } else {
-                        // Create new record
-                        val attendance = Attendance(
-                            studentId = student.id,
-                            sectionId = student.sectionId,
-                            date = today,
-                            status = "Present",
-                            timeIn = now
-                        )
-                        SupabaseConfig.client.postgrest["attendance"].insert(attendance)
-                        successMessage = "Entrance recorded for ${student.name}"
+                val response = SupabaseConfig.client.postgrest.rpc(
+                    function = "process_attendance_scan",
+                    parameters = buildJsonObject {
+                        put("p_session_code", sessionCode)
+                        put("p_scan_mode", scanMode)
                     }
-                } else { // Exit mode
-                    if (existing == null) {
-                        errorMessage = "No entrance record found for ${student.name} today"
-                    } else if (existing.timeOut != null) {
-                        errorMessage = "${student.name} already scanned OUT today at ${existing.timeOut}"
-                    } else {
-                        SupabaseConfig.client.postgrest["attendance"].update(
-                            mapOf(
-                                "time_out" to now,
-                                "updated_at" to now
-                            )
-                        ) {
-                            filter { eq("id", existing.id!!) }
-                        }
-                        successMessage = "Exit recorded for ${student.name}"
-                    }
+                ).decodeAs<ScanResponse>()
+
+                if (response.success) {
+                    successMessage = response.message
+                } else {
+                    errorMessage = response.message
                 }
             } catch (e: Exception) {
                 Log.e("ScannerVM", "Error processing scan", e)
-                errorMessage = "Failed to process scan: ${e.message}"
+                errorMessage = "Scan failed: ${e.message}"
             } finally {
                 isLoading = false
             }

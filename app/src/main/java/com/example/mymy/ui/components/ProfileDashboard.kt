@@ -32,7 +32,12 @@ import com.example.mymy.util.BarcodeUtils
 fun ProfileDashboard(
     user: User?,
     onUpdate: (User) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    qrSession: com.example.mymy.data.model.StudentQrSession? = null,
+    qrCountdown: Int = 0,
+    qrError: String? = null,
+    onStartQr: () -> Unit = {},
+    onStopQr: () -> Unit = {}
 ) {
     if (user == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -45,9 +50,17 @@ fun ProfileDashboard(
     var isEditing by remember { mutableStateOf(false) }
     var showQRCodeDialog by remember { mutableStateOf(false) }
     
-    // QR Code generation based on student ID
-    val qrBitmap = remember(user.studentNo) {
-        user.studentNo?.let { BarcodeUtils.generateQRCode(it) }
+    // Dynamic QR generation
+    val dynamicQrBitmap = remember(qrSession?.sessionCode) {
+        qrSession?.sessionCode?.let { BarcodeUtils.generateQRCode(it) }
+    }
+
+    LaunchedEffect(showQRCodeDialog) {
+        if (showQRCodeDialog) {
+            onStartQr()
+        } else {
+            onStopQr()
+        }
     }
     
     // Editable States
@@ -115,7 +128,7 @@ fun ProfileDashboard(
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("View ID Barcode", style = MaterialTheme.typography.labelMedium)
+                        Text("View Dynamic Attendance QR", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -285,7 +298,7 @@ fun ProfileDashboard(
         }
     }
 
-    if (showQRCodeDialog && qrBitmap != null) {
+    if (showQRCodeDialog) {
         AlertDialog(
             onDismissRequest = { showQRCodeDialog = false },
             title = { Text("Attendance QR Code", color = DeepGreen, fontWeight = FontWeight.Bold) },
@@ -294,16 +307,44 @@ fun ProfileDashboard(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Student ID: ${user.studentNo}", style = MaterialTheme.typography.bodyMedium)
+                    if (qrError != null) {
+                        Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(qrError, color = Color.Red, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    } else if (dynamicQrBitmap != null) {
+                        Text("Session Code: ${qrSession?.sessionCode}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        androidx.compose.foundation.Image(
+                            bitmap = dynamicQrBitmap.asImageBitmap(),
+                            contentDescription = "Student Dynamic QR Code",
+                            modifier = Modifier.size(250.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        val countdownText = if (qrCountdown > 0) "$qrCountdown seconds" else "Expired"
+                        val countdownColor = if (qrCountdown > 10) DeepGreen else Color.Red
+                        
+                        Surface(
+                            color = countdownColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                countdownText,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = countdownColor
+                            )
+                        }
+                    } else {
+                        CircularProgressIndicator(color = DeepGreen)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Generating secure session...")
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    androidx.compose.foundation.Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "Student QR Code",
-                        modifier = Modifier.size(250.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Present this code for attendance check",
+                        "This QR code refreshes every 30 seconds for security.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -311,15 +352,17 @@ fun ProfileDashboard(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        BarcodeUtils.saveBitmapToGallery(context, qrBitmap, "Student_QR_${user.studentNo}")
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Download PNG")
+                if (dynamicQrBitmap != null) {
+                    Button(
+                        onClick = {
+                            BarcodeUtils.saveBitmapToGallery(context, dynamicQrBitmap, "Student_QR_${user.studentNo}")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepGreen)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Save")
+                    }
                 }
             },
             dismissButton = {

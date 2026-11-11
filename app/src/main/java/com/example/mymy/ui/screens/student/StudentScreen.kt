@@ -613,6 +613,11 @@ fun ProfileContent(viewModel: StudentViewModel, onLogout: () -> Unit) {
     ProfileDashboard(
         user = viewModel.userProfile,
         onUpdate = { viewModel.updateProfile(it) },
-        onLogout = onLogout
+        onLogout = onLogout,
+        qrSession = viewModel.qrSession,
+        qrCountdown = viewModel.qrCountdown,
+        qrError = viewModel.qrError,
+        onStartQr = { viewModel.startQrSession() },
+        onStopQr = { viewModel.stopQrSession() }
     )
 }
