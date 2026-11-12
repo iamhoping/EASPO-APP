@@ -613,27 +613,21 @@ fun AttendanceListItem(att: Attendance) {
                         Text(" • ", color = LightText)
                         val displayTime = remember(att.timeIn) {
                             try {
-                                val parts = att.timeIn.split(" ")
-                                val timeStr = if (parts.size > 1) parts[1] else parts[0]
-                                
-                                if (timeStr.contains("AM", ignoreCase = true) || timeStr.contains("PM", ignoreCase = true)) {
-                                    timeStr
-                                } else {
-                                    val t = timeStr.split(":")
-                                    if (t.size >= 2) {
-                                        val h = t[0].toInt()
-                                        val m = t[1].toInt()
-                                        val ampm = if (h >= 12) "PM" else "AM"
-                                        val displayH = when {
-                                            h == 0 -> 12
-                                            h > 12 -> h - 12
-                                            else -> h
-                                        }
-                                        "%d:%02d %s".format(displayH, m, ampm)
-                                    } else {
-                                        timeStr
-                                    }
-                                }
+                                val raw = att.timeIn.trim()
+                                val timeMatch = Regex("\\d{1,2}:\\d{2}").find(raw)
+                                if (timeMatch != null) {
+                                    val time = timeMatch.value
+                                    val ampm = if (raw.contains("PM", true)) "PM"
+                                               else if (raw.contains("AM", true)) "AM"
+                                               else {
+                                                   val h = time.split(":")[0].toInt()
+                                                   if (h >= 12) "PM" else "AM"
+                                               }
+                                    val h24 = time.split(":")[0].toInt()
+                                    val h12 = if (h24 % 12 == 0) 12 else h24 % 12
+                                    val m = time.split(":")[1]
+                                    "$h12:$m $ampm"
+                                } else raw
                             } catch (e: Exception) {
                                 att.timeIn
                             }
